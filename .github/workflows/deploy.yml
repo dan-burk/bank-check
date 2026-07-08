@@ -32,7 +32,7 @@ jobs:
         run: Rscript -e 'install.packages("shinylive")'
 
       - name: Export app to static site
-        run: Rscript -e 'shinylive::export("app", "_site")'
+        run: Rscript -e 'shinylive::export("app", "_site", template_params = list(title = "Bank Check"))'
 
       - name: Disable Jekyll
         run: touch _site/.nojekyll
