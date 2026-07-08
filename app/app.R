@@ -77,11 +77,13 @@ star_lines <- function(stars) {
   lapply(strsplit(stars, "|", fixed = TRUE)[[1]], star_line)
 }
 
+# Flex classes go on card_header itself, never on a wrapper div inside it:
+# card_header is a flex container in current bslib, so an inner div shrinks
+# to content width and its justify-content-between does nothing (title and
+# controls end up jammed together).
 chip_header <- function(title, group) {
-  card_header(div(
-    class = "d-flex justify-content-between align-items-center gap-2",
-    span(title), cat_chip(group)
-  ))
+  card_header(class = "d-flex justify-content-between align-items-center gap-2",
+              span(title), cat_chip(group))
 }
 
 # Dotted-line swatch matching threshold_layers() in plots.R, for legends
@@ -138,7 +140,7 @@ DISPLAY_CHOICES <- c("$" = "level", "% assets" = "pct_assets",
 # header; chart fills the card; footnote explains the metric.
 ui_explorer <- function(id, groups, default, height = "440px") {
   card(
-    card_header(div(
+    card_header(
       class = "d-flex justify-content-between align-items-center flex-wrap gap-2",
       selectInput(paste0(id, "_metric"), NULL,
                   choices = scoped_choices(groups), selected = default,
@@ -146,7 +148,7 @@ ui_explorer <- function(id, groups, default, height = "440px") {
       div(class = "d-flex align-items-center gap-3",
           uiOutput(paste0(id, "_toggle")),
           uiOutput(paste0(id, "_chip")))
-    )),
+    ),
     plotlyOutput(paste0(id, "_plot"), height = height),
     card_footer(class = "text-muted small", uiOutput(paste0(id, "_caveat")))
   )
@@ -161,17 +163,24 @@ ui <- page_navbar(
   # everything into one viewport (which crushed the metric table to a sliver).
   fillable = c("Overview", "Capital", "Asset Quality", "Earnings",
                "Liquidity & Funding", "Sensitivity", "Compare to Failures"),
-  # Dictionary styling: commonmark emits bare <table> tags that Bootstrap 5
-  # leaves unstyled; the gsub in output$dict_full adds .table classes and
-  # this block handles sizing and heading rhythm.
-  header = tags$style(HTML("
-    .dict-md { max-width: 72rem; }
-    .dict-md h1 { font-size: 1.4rem; }
-    .dict-md h2 { font-size: 1.15rem; margin-top: 1.5rem;
-                  border-bottom: 1px solid #DEE2E6; padding-bottom: 0.3rem; }
-    .dict-md table { font-size: 0.92rem; }
-    #dict_table { font-size: 0.95rem; }
-  ")),
+  header = tagList(
+    # Dictionary styling: commonmark emits bare <table> tags that Bootstrap
+    # 5 leaves unstyled; the gsub in output$dict_full adds .table classes
+    # and this block handles sizing and heading rhythm.
+    tags$style(HTML("
+      .dict-md { max-width: 72rem; }
+      .dict-md h1 { font-size: 1.4rem; }
+      .dict-md h2 { font-size: 1.15rem; margin-top: 1.5rem;
+                    border-bottom: 1px solid #DEE2E6; padding-bottom: 0.3rem; }
+      .dict-md table { font-size: 0.92rem; }
+      #dict_table { font-size: 0.95rem; }
+    ")),
+    # Dependency primer for shinylive: a hidden static widget makes the
+    # browser fetch plotly's JS at page load. Without it, the first server-
+    # rendered charts race the 3.5 MB script through the service worker and
+    # lose ("Plotly is not defined", blank cards) on uncached first visits.
+    div(style = "display:none;", plotly::plot_ly())
+  ),
   sidebar = sidebar(
     width = 320,
     selectizeInput("bank_pick", "Find a bank", choices = NULL,
@@ -181,7 +190,14 @@ ui <- page_navbar(
                    options = list(placeholder = "Search any bank...",
                                   maxOptions = 8)),
     helpText("Supports all active FDIC banks. Quarterly history from 1984 ",
-             "(or Origination) to present.")
+             "(or Origination) to present."),
+    # Legal one-liner lives here, not in a page footer: a footer inside the
+    # fillable pages fights the flex layout and overlaps the last outputs
+    div(class = "text-muted small mt-auto pt-3",
+        paste0("Informational only, not financial advice. Public FDIC ",
+               "data; not affiliated with the FDIC. Deposits at ",
+               "FDIC-insured banks are insured up to $250,000. ",
+               "See the Legal tab."))
   ),
 
   nav_panel(
@@ -221,11 +237,11 @@ ui <- page_navbar(
         "Reserves",
         layout_columns(
           col_widths = c(6, 6),
-          card(card_header(div(
+          card(card_header(
                  class = "d-flex justify-content-between align-items-center",
                  "Risk vs Cushion",
                  radioButtons("rc_mode", NULL, inline = TRUE,
-                              choices = c("%" = "pct", "$" = "usd")))),
+                              choices = c("%" = "pct", "$" = "usd"))),
                plotlyOutput("rc_plot", height = "400px"),
                card_footer(class = "text-muted small",
                            div(paste0("The allowance* should cover the ",
@@ -239,11 +255,11 @@ ui <- page_navbar(
                                             "the largest banks) the allowance covers expected ",
                                             "lifetime losses, so the line can jump without ",
                                             "new trouble")))),
-          card(card_header(div(
+          card(card_header(
                  class = "d-flex justify-content-between align-items-center",
                  "Provision vs Charge-offs",
                  radioButtons("prov_mode", NULL, inline = TRUE,
-                              choices = c("%" = "pct", "$" = "usd")))),
+                              choices = c("%" = "pct", "$" = "usd"))),
                plotlyOutput("prov_plot", height = "400px"),
                card_footer(class = "text-muted small",
                            div(paste0("Provision* adds to the allowance; ",
@@ -257,11 +273,11 @@ ui <- page_navbar(
       nav_panel(
         "Loan Mix",
         card(
-          card_header(div(
+          card_header(
             class = "d-flex justify-content-between align-items-center",
             "What the Bank Lends Against",
             radioButtons("mix_mode", NULL, inline = TRUE,
-                         choices = c("%" = "pct", "$" = "usd")))),
+                         choices = c("%" = "pct", "$" = "usd"))),
           plotlyOutput("mix_plot", height = "440px"),
           card_footer(class = "text-muted small",
                       div(paste0("Each band is a share of the loan book. ",
@@ -351,14 +367,6 @@ ui <- page_navbar(
   nav_panel(
     "Legal",
     card(div(class = "dict-md p-3", uiOutput("legal_docs")))
-  ),
-
-  # One-line liability footer on every page; the Legal tab has the rest
-  footer = div(
-    class = "text-muted small px-3 py-2 border-top",
-    paste0("Informational only, not financial advice. Public FDIC data; ",
-           "not affiliated with the FDIC. Deposits at FDIC-insured banks ",
-           "are insured up to $250,000. See the Legal tab.")
   )
 )
 

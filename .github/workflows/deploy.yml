@@ -34,8 +34,10 @@ jobs:
       - name: Export app to static site
         run: Rscript -e 'shinylive::export("app", "_site", template_params = list(title = "Bank Check"))'
 
-      - name: Disable Jekyll
-        run: touch _site/.nojekyll
+      - name: Disable Jekyll, add favicon
+        run: |
+          touch _site/.nojekyll
+          cp favicon.ico _site/favicon.ico
 
       - uses: actions/upload-pages-artifact@v3
         with:
