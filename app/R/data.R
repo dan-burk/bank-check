@@ -1,14 +1,21 @@
 # Data loading, derived metrics, and the live FDIC fetch with cache.
 # Working directory at runtime is app/ (shiny::runApp("app") from repo
 # root, or the shinylive virtual filesystem root in the browser). The app
-# reads ONLY from app/: everything it needs from the wider repo is vendored
-# into app/data/ by app/build/sync_assets.R, because shinylive exports the
-# app directory alone. Transport lives in R/api.R (auto-sourced first).
+# reads ONLY from app/: shinylive exports the app directory alone.
+# Transport lives in R/api.R (auto-sourced first).
+#
+# Shipped data is .rds, not .csv, and the app avoids readr on purpose:
+# rds is ~4x smaller in the bundle and loads pre-parsed (parsing a 7 MB
+# CSV inside WebAssembly is slow), and dropping readr removes seven
+# packages from the browser's cold-start download.
 
 CACHE_DIR <- "data-cache"
 if (!dir.exists(CACHE_DIR)) dir.create(CACHE_DIR)
 
-FIELDS_META <- readr::read_csv("data/fields_meta.csv", show_col_types = FALSE)
+# na.strings: read.csv turns blank cells into "" by default, but the
+# footnote and threshold code tests is.na()
+FIELDS_META <- utils::read.csv("data/fields_meta.csv",
+                               na.strings = c("", "NA"))
 
 # Derived columns shared by every bank data frame ----
 derive <- function(df) {
@@ -29,9 +36,8 @@ derive <- function(df) {
 # Base store: the 7-bank comparison panel, with Dacotah swapped for its
 # longer 1984+ pull from analysis 001.
 load_base_banks <- function() {
-  panel <- readr::read_csv("data/panel_histories.csv", show_col_types = FALSE)
-  dacotah <- readr::read_csv("data/dacotah_expanded.csv",
-                             show_col_types = FALSE) |>
+  panel <- readRDS("data/panel_histories.rds")
+  dacotah <- readRDS("data/dacotah_expanded.rds") |>
     dplyr::mutate(label = "Dacotah (SD)", fail_date = as.Date(NA))
 
   panel <- panel |> dplyr::filter(label != "Dacotah (SD)")
@@ -50,22 +56,16 @@ load_base_banks <- function() {
 
 # All ~570 post-2000 failures: pre-failure quarterly histories (0-20
 # quarters before failure) built once by app/build/build_fail_panel.R.
-# qtrs_before is stored in the CSV; derive() adds the shared derived columns.
+# qtrs_before is stored in the rds; derive() adds the shared derived columns.
 load_fail_panel <- function() {
-  # guess_max past the row count: fields that did not exist in 2000 (the
-  # earliest failures sort first) would otherwise be guessed as logical
-  readr::read_csv("data/fail_panel.csv", show_col_types = FALSE,
-                  guess_max = 20000) |>
-    derive() |>
-    dplyr::mutate(fail_date = as.Date(fail_date))
+  readRDS("data/fail_panel.rds") |> derive()
 }
 
 # Picker metadata for the failures tab: label, region, size bucket. Banks
 # with zero pre-failure filings are excluded (nothing to draw).
 load_fail_meta <- function() {
-  readr::read_csv("data/failures_meta.csv", show_col_types = FALSE) |>
-    dplyr::filter(n_filings > 0) |>
-    dplyr::mutate(fail_date = as.Date(fail_date))
+  readRDS("data/failures_meta.rds") |>
+    dplyr::filter(n_filings > 0)
 }
 
 # Per-quarter median of one metric across a failure panel. min_n trims the
@@ -88,13 +88,13 @@ fail_median <- function(panel, code, min_n = 5) {
 # bank. In the browser the cache is webR's in-memory filesystem, so it
 # lasts one session; on desktop it persists in app/data-cache/.
 fetch_bank_cached <- function(cert) {
-  cache <- file.path(CACHE_DIR, paste0("cert_", cert, ".csv"))
+  cache <- file.path(CACHE_DIR, paste0("cert_", cert, ".rds"))
   if (file.exists(cache)) {
-    return(derive(readr::read_csv(cache, show_col_types = FALSE)))
+    return(derive(readRDS(cache)))
   }
   df <- fetch_bank_financials(cert = cert)
   if (is.null(df)) return(NULL)
-  readr::write_csv(df, cache)
+  saveRDS(df, cache)
   derive(df)
 }
 
@@ -104,17 +104,17 @@ fetch_bank_cached <- function(cert) {
 XS_RISDATE <- 20260331
 
 fetch_cross_section_cached <- function(max_age_days = 30) {
-  shipped <- file.path("data", paste0("xs_", XS_RISDATE, ".csv"))
+  shipped <- file.path("data", paste0("xs_", XS_RISDATE, ".rds"))
   if (file.exists(shipped)) {
-    return(derive(readr::read_csv(shipped, show_col_types = FALSE)))
+    return(derive(readRDS(shipped)))
   }
-  cache <- file.path(CACHE_DIR, paste0("xs_", XS_RISDATE, ".csv"))
+  cache <- file.path(CACHE_DIR, paste0("xs_", XS_RISDATE, ".rds"))
   if (file.exists(cache) &&
       difftime(Sys.time(), file.mtime(cache), units = "days") < max_age_days) {
-    return(derive(readr::read_csv(cache, show_col_types = FALSE)))
+    return(derive(readRDS(cache)))
   }
   xs <- fetch_all_banks_quarter(XS_RISDATE)
-  readr::write_csv(xs, cache)
+  saveRDS(xs, cache)
   derive(xs)
 }
 
@@ -150,17 +150,17 @@ bank_label <- function(cert, inst, fallback_name = NULL) {
 # copy first (refreshed at deploy), then the 30-day desktop cache, then a
 # live fetch (one request; all rows fit under the 10k cap).
 fetch_institutions_cached <- function(max_age_days = 30) {
-  shipped <- file.path("data", "institutions.csv")
+  shipped <- file.path("data", "institutions.rds")
   if (file.exists(shipped)) {
-    return(readr::read_csv(shipped, show_col_types = FALSE))
+    return(readRDS(shipped))
   }
-  cache <- file.path(CACHE_DIR, "institutions.csv")
+  cache <- file.path(CACHE_DIR, "institutions.rds")
   if (file.exists(cache) &&
       difftime(Sys.time(), file.mtime(cache), units = "days") < max_age_days) {
-    return(readr::read_csv(cache, show_col_types = FALSE))
+    return(readRDS(cache))
   }
   df <- fetch_institutions()
-  readr::write_csv(df, cache)
+  saveRDS(df, cache)
   df
 }
 

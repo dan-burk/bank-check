@@ -6,10 +6,11 @@
 # repo root, only to refresh:
 #   Rscript.exe app/build/build_fail_panel.R
 #
-# Output:
-#   app/data/fail_panel.csv     one row per (CERT, quarter), 0-20 quarters
+# Output (rds, not csv: smaller in the shinylive bundle and pre-parsed,
+# and no readr so the browser never downloads it):
+#   app/data/fail_panel.rds     one row per (CERT, quarter), 0-20 quarters
 #                               before failure, APP_FIELDS columns
-#   app/data/failures_meta.csv  one row per failed bank, picker metadata
+#   app/data/failures_meta.rds  one row per failed bank, picker metadata
 #
 # Survivorship gap: failed banks often stop filing 1-2 quarters before
 # FAILDATE. qtrs_before is computed from actual filed RISDATEs, so missing
@@ -17,7 +18,6 @@
 
 # Load libraries ----
 library(dplyr)
-library(readr)
 
 source(paste0(getwd(), "/app/R/api.R"))
 
@@ -122,8 +122,8 @@ meta <- fails |>
          region, size_bucket, n_filings) |>
   arrange(fail_date)
 
-write_csv(panel, file.path(OUT_DIR, "fail_panel.csv"))
-write_csv(meta, file.path(OUT_DIR, "failures_meta.csv"))
+saveRDS(panel, file.path(OUT_DIR, "fail_panel.rds"))
+saveRDS(meta, file.path(OUT_DIR, "failures_meta.rds"))
 
 # 8. Survivorship summary: how close to failure does the last filing get ----
 last_filing <- panel |>
