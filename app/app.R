@@ -174,6 +174,10 @@ ui <- page_navbar(
                     border-bottom: 1px solid #DEE2E6; padding-bottom: 0.3rem; }
       .dict-md table { font-size: 0.92rem; }
       #dict_table { font-size: 0.95rem; }
+      /* Wide tables scroll sideways on phones instead of overflowing */
+      @media (max-width: 767px) {
+        .dict-md table { display: block; overflow-x: auto; }
+      }
     ")),
     # Dependency primer for shinylive: a hidden static widget makes the
     # browser fetch plotly's JS at page load. Without it, the first server-
@@ -236,7 +240,7 @@ ui <- page_navbar(
       nav_panel(
         "Reserves",
         layout_columns(
-          col_widths = c(6, 6),
+          col_widths = breakpoints(xs = c(12, 12), lg = c(6, 6)),
           card(card_header(
                  class = "d-flex justify-content-between align-items-center",
                  "Risk vs Cushion",
@@ -329,7 +333,7 @@ ui <- page_navbar(
   nav_panel(
     "Compare to Failures",
     layout_columns(
-      col_widths = c(3, 9),
+      col_widths = breakpoints(xs = c(12, 12), lg = c(3, 9)),
       card(
         selectInput("traj_metric", "Metric",
                     choices = split(setNames(FIELDS_META$code, FIELDS_META$label),
@@ -467,7 +471,8 @@ server <- function(input, output, session) {
         theme = value_box_theme(bg = "#F4F7FA", fg = "#1F2933")
       )
     })
-    do.call(layout_columns, c(list(col_widths = rep(2, 6)), boxes))
+    do.call(layout_columns,
+            c(list(col_widths = breakpoints(xs = 6, lg = 2)), boxes))
   })
 
   # Scale strip: selected banks against all ~4,300 by total assets ----
@@ -498,7 +503,8 @@ server <- function(input, output, session) {
         plotlyOutput(paste0("tile_", i), height = "200px")
       )
     })
-    do.call(layout_columns, c(list(col_widths = rep(4, 6)), tiles))
+    do.call(layout_columns,
+            c(list(col_widths = breakpoints(xs = 12, sm = 6, xl = 4)), tiles))
   })
   for (i in seq_along(CAMELS_TILES)) local({
     ii <- i
@@ -641,6 +647,7 @@ server <- function(input, output, session) {
     DT::datatable(
       tbl, rownames = FALSE,
       options = list(pageLength = nrow(tbl), dom = "ft", autoWidth = TRUE,
+                     scrollX = TRUE,
                      columnDefs = list(list(width = "38%", targets = 4)))
     )
   })
