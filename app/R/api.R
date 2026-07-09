@@ -1,9 +1,14 @@
-# FDIC API client for the app. No httr2/curl on purpose: the curl package
-# has no WebAssembly build, so httr2 cannot load under shinylive/webR. Base
-# url() works in both worlds (webR shims it onto the browser's fetch, and
-# the FDIC API is CORS-open), so the same code runs on desktop R and on
-# GitHub Pages. The repo-root R/ fetch functions keep httr2 for analysis
-# scripts; this file is the app's only transport.
+# FDIC API client for the app, base R networking only: the app must run
+# unchanged on desktop R, shinyapps.io, and shinylive/webR, and the usual
+# HTTP client packages have no working WebAssembly build. download.file
+# covers all three runtimes (webR shims it onto the browser's fetch, and
+# the FDIC API is CORS-open). The repo-root R/ fetch functions keep their
+# richer client for analysis scripts; this file is the app's only transport.
+#
+# Keep request URLs short. webR's internet module writes the URL into a
+# fixed buffer; past ~4,000 chars every in-browser fetch dies with
+# "problem writing module_download template in internet module". That, not
+# response size, is what broke the GitHub Pages build in 2026-07.
 #
 # API conventions (verified 2026-07-07, see analysis/data-dictionary.md):
 # dollar fields are $thousands, RISDATE = REPDTE (integer YYYYMMDD), 10k
@@ -30,33 +35,17 @@ APP_FIELDS <- paste0(
   "ROAQ,ROEQ,NIMYQ,ELNATRYQ,NTLNLSQR"
 )
 
-# Two transports, tried in order, because desktop R and webR support
-# different halves of base networking:
-#   1. download.file to a temp file: solid on desktop and shinyapps.io,
-#      but fails under webR (its shim does not cover it).
-#   2. url() connection read in BINARY CHUNKS via readBin: works under
-#      webR's XHR shim. Chunked reads matter; readLines on the FDIC's
-#      single-line 500 KB responses overran webR's line buffer and
-#      crashed the wasm runtime ("memory access out of bounds").
-fetch_body_download <- function(u) {
+# Download to a temp file and read the whole body back. Verified in all
+# three runtimes (desktop smoke test; headless Chromium against the
+# deployed shinylive build, 2026-07-09, including the 260 KB Citibank
+# history).
+fetch_body <- function(u) {
   tmp <- tempfile(fileext = ".json")
   on.exit(unlink(tmp))
   status <- suppressWarnings(utils::download.file(u, tmp, quiet = TRUE,
                                                   mode = "wb"))
   if (status != 0) stop("download.file returned status ", status)
   readChar(tmp, file.size(tmp), useBytes = TRUE)
-}
-
-fetch_body_connection <- function(u) {
-  con <- url(u, open = "rb")
-  on.exit(close(con))
-  chunks <- list()
-  repeat {
-    b <- readBin(con, "raw", n = 65536L)
-    if (length(b) == 0) break
-    chunks[[length(chunks) + 1]] <- b
-  }
-  rawToChar(do.call(c, chunks))
 }
 
 # GET endpoint?params and parse the JSON body. simplifyVector = FALSE keeps
@@ -71,9 +60,7 @@ fdic_query <- function(endpoint, params) {
                      character(1)),
               sep = "=", collapse = "&")
   u <- paste0(endpoint, "?", qs)
-  txt <- tryCatch(fetch_body_download(u), error = function(e) NULL)
-  if (is.null(txt)) txt <- fetch_body_connection(u)
-  jsonlite::fromJSON(txt, simplifyVector = FALSE)
+  jsonlite::fromJSON(fetch_body(u), simplifyVector = FALSE)
 }
 
 # One FDIC record to a 1-row data frame; NULL fields (not reported that
