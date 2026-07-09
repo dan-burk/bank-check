@@ -30,26 +30,48 @@ APP_FIELDS <- paste0(
   "ROAQ,ROEQ,NIMYQ,ELNATRYQ,NTLNLSQR"
 )
 
+# Two transports, tried in order, because desktop R and webR support
+# different halves of base networking:
+#   1. download.file to a temp file: solid on desktop and shinyapps.io,
+#      but fails under webR (its shim does not cover it).
+#   2. url() connection read in BINARY CHUNKS via readBin: works under
+#      webR's XHR shim. Chunked reads matter; readLines on the FDIC's
+#      single-line 500 KB responses overran webR's line buffer and
+#      crashed the wasm runtime ("memory access out of bounds").
+fetch_body_download <- function(u) {
+  tmp <- tempfile(fileext = ".json")
+  on.exit(unlink(tmp))
+  status <- suppressWarnings(utils::download.file(u, tmp, quiet = TRUE,
+                                                  mode = "wb"))
+  if (status != 0) stop("download.file returned status ", status)
+  readChar(tmp, file.size(tmp), useBytes = TRUE)
+}
+
+fetch_body_connection <- function(u) {
+  con <- url(u, open = "rb")
+  on.exit(close(con))
+  chunks <- list()
+  repeat {
+    b <- readBin(con, "raw", n = 65536L)
+    if (length(b) == 0) break
+    chunks[[length(chunks) + 1]] <- b
+  }
+  rawToChar(do.call(c, chunks))
+}
+
 # GET endpoint?params and parse the JSON body. simplifyVector = FALSE keeps
 # the structure identical to httr2::resp_body_json, so the flattening code
 # is shared verbatim with the repo fetch functions.
-# Fetch goes to a temp file with download.file, never url() + readLines: the
-# FDIC returns the whole body as ONE line, and streaming a 500 KB line
-# through webR's connection buffer crashes the wasm runtime ("memory
-# access out of bounds"). download.file is webR's well-trodden path (one
-# fetch into the virtual filesystem) and behaves identically on desktop R.
 fdic_query <- function(endpoint, params) {
   qs <- paste(names(params),
               vapply(params, function(v) utils::URLencode(as.character(v),
                                                           reserved = TRUE),
                      character(1)),
               sep = "=", collapse = "&")
-  tmp <- tempfile(fileext = ".json")
-  on.exit(unlink(tmp))
-  status <- utils::download.file(paste0(endpoint, "?", qs), tmp,
-                                 quiet = TRUE, mode = "wb")
-  if (status != 0) stop("FDIC request failed with status ", status)
-  jsonlite::fromJSON(tmp, simplifyVector = FALSE)
+  u <- paste0(endpoint, "?", qs)
+  txt <- tryCatch(fetch_body_download(u), error = function(e) NULL)
+  if (is.null(txt)) txt <- fetch_body_connection(u)
+  jsonlite::fromJSON(txt, simplifyVector = FALSE)
 }
 
 # One FDIC record to a 1-row data frame; NULL fields (not reported that
