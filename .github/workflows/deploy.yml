@@ -1,12 +1,9 @@
-# Build the Shiny app into a static shinylive bundle and publish it to
-# GitHub Pages. The app runs entirely in the visitor's browser via webR;
-# there is no server. Repo Settings > Pages must be set to "GitHub Actions".
+# DORMANT: the app deploys to shinyapps.io now (deploy-shinyapps.yml);
+# the wasm cold start was too slow. This workflow still works and can be
+# run manually from the Actions tab to refresh the GitHub Pages version.
 name: Deploy app to GitHub Pages
 
 on:
-  push:
-    branches: [main]
-    paths: ["app/**", ".github/workflows/deploy.yml"]
   workflow_dispatch:
 
 permissions:
