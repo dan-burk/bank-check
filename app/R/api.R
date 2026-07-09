@@ -60,8 +60,10 @@ fetch_body_connection <- function(u) {
 }
 
 # GET endpoint?params and parse the JSON body. simplifyVector = FALSE keeps
-# the structure identical to httr2::resp_body_json, so the flattening code
-# is shared verbatim with the repo fetch functions.
+# the structure identical to what the repo fetch functions get from their
+# HTTP client, so the flattening code is shared verbatim. (Do not name that
+# client package here: shinylive's dependency scan reads comments too, and
+# a bare mention ships seven extra wasm packages to the browser.)
 fdic_query <- function(endpoint, params) {
   qs <- paste(names(params),
               vapply(params, function(v) utils::URLencode(as.character(v),
@@ -81,14 +83,16 @@ flatten_record <- function(record) {
   as.data.frame(record, stringsAsFactors = FALSE)
 }
 
-# Full quarterly history for one bank
+# Full quarterly history for one bank. The date filter is a range, not an
+# OR-list of the 172 quarter-ends: webR's internet module writes the URL
+# into a fixed buffer, and the enumerated form (~4,600 chars) overflows it
+# ("problem writing module_download template"), killing every in-browser
+# fetch. The index only holds quarter-end records, so the range is exact.
 fetch_bank_financials <- function(cert, years = 1984:2026,
                                   fields = APP_FIELDS) {
-  q_ends <- c("0331", "0630", "0930", "1231")
-  dates <- paste0(rep(years, each = 4), q_ends)
   body <- fdic_query(FDIC_FINANCIALS_ENDPOINT, list(
-    filters = paste0("RISDATE:(", paste(dates, collapse = " OR "),
-                     ") AND CERT:", cert),
+    filters = paste0("CERT:", cert, " AND RISDATE:[", min(years), "0101 TO ",
+                     max(years), "1231]"),
     fields = fields, limit = 10000, offset = 0
   ))
   if (body$meta$total == 0) return(NULL)

@@ -391,7 +391,12 @@ server <- function(input, output, session) {
     if (!nzchar(cert) || cert %in% names(loaded())) return(invisible(TRUE))
     id <- showNotification("Fetching from FDIC...", duration = NULL)
     on.exit(removeNotification(id))
-    df <- tryCatch(fetch_bank_cached(as.integer(cert)), error = function(e) NULL)
+    df <- tryCatch(fetch_bank_cached(as.integer(cert)), error = function(e) e)
+    if (inherits(df, "error")) {
+      showNotification(paste0("FDIC fetch failed (", conditionMessage(df),
+                              "). Try again in a moment."), type = "error")
+      return(invisible(FALSE))
+    }
     if (is.null(df) || nrow(df) == 0) {
       showNotification(paste("No FDIC data for CERT", cert), type = "error")
       return(invisible(FALSE))
