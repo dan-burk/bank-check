@@ -183,12 +183,12 @@ ui_explorer <- function(id, groups, default, height = "440px") {
 ui <- page_navbar(
   title = "Bank Check",
   theme = app_theme(),
-  # The dashboard panels have fixed-height charts and stay fillable.
-  # Dictionary and Legal are documents: excluded from fillable so their
-  # cards grow with content and the page scrolls, instead of flex-fitting
-  # everything into one viewport (which crushed the metric table to a sliver).
-  fillable = c("Overview", "Capital", "Asset Quality", "Earnings",
-               "Liquidity & Funding", "Sensitivity", "Compare to Failures"),
+  # Never fillable: every chart has a fixed pixel height, so viewport-
+  # fitting buys nothing and current bslib flex-squeezes whatever does not
+  # fit to zero height (it crushed the dictionary table, then hid the
+  # Overview size chart on desktop while mobile, which is non-fillable by
+  # default, showed it). Pages flow and scroll like documents everywhere.
+  fillable = FALSE,
   header = tagList(
     # Dictionary styling: commonmark emits bare <table> tags that Bootstrap
     # 5 leaves unstyled; the gsub in output$dict_full adds .table classes
