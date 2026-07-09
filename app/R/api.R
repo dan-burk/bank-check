@@ -33,16 +33,23 @@ APP_FIELDS <- paste0(
 # GET endpoint?params and parse the JSON body. simplifyVector = FALSE keeps
 # the structure identical to httr2::resp_body_json, so the flattening code
 # is shared verbatim with the repo fetch functions.
+# Fetch goes to a temp file with download.file, never url() + readLines: the
+# FDIC returns the whole body as ONE line, and streaming a 500 KB line
+# through webR's connection buffer crashes the wasm runtime ("memory
+# access out of bounds"). download.file is webR's well-trodden path (one
+# fetch into the virtual filesystem) and behaves identically on desktop R.
 fdic_query <- function(endpoint, params) {
   qs <- paste(names(params),
               vapply(params, function(v) utils::URLencode(as.character(v),
                                                           reserved = TRUE),
                      character(1)),
               sep = "=", collapse = "&")
-  con <- url(paste0(endpoint, "?", qs))
-  on.exit(close(con))
-  jsonlite::fromJSON(paste(readLines(con, warn = FALSE), collapse = ""),
-                     simplifyVector = FALSE)
+  tmp <- tempfile(fileext = ".json")
+  on.exit(unlink(tmp))
+  status <- utils::download.file(paste0(endpoint, "?", qs), tmp,
+                                 quiet = TRUE, mode = "wb")
+  if (status != 0) stop("FDIC request failed with status ", status)
+  jsonlite::fromJSON(tmp, simplifyVector = FALSE)
 }
 
 # One FDIC record to a 1-row data frame; NULL fields (not reported that
