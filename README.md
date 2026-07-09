@@ -9,7 +9,7 @@ Plain R Shiny, no keys, no accounts.
 ## Two deployments, same code
 
 - **shinyapps.io** (standard hosted Shiny, loads in seconds):
-  link added after first deploy
+  https://danielburkhalter.shinyapps.io/bank-check/
 - **GitHub Pages** (shinylive, R compiled to WebAssembly running in your
   browser; slow first load while the runtime downloads, then cached):
   https://dan-burk.github.io/bank-check/
