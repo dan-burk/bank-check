@@ -27,6 +27,33 @@ TRAJ_SIZES   <- c("Under $100M", "$100M to $1B", "$1B to $10B", "Over $10B")
 
 EMPTY_MSG <- "Search for a bank in the sidebar to load its history."
 
+# One codebase, two deployments: shinyapps.io (server) and shinylive/webR
+# on GitHub Pages (in-browser). Server-only behaviors key off this flag.
+IS_WASM <- grepl("emscripten|wasm",
+                 paste(R.version$os, R.version$platform))
+PAGES_URL <- "https://dan-burk.github.io/bank-check/"
+
+# Server deployments meter active hours, and an app left open in a
+# background tab holds its connection and burns them. Disconnect after 10
+# minutes without interaction; the platform's own idle timeout can then
+# put the instance to sleep. Meaningless in-browser, so wasm skips it.
+IDLE_JS <- "
+(function() {
+  var idleMs = 10 * 60 * 1000, timer;
+  function reset() {
+    clearTimeout(timer);
+    timer = setTimeout(function() {
+      Shiny.setInputValue('session_idle', Date.now());
+    }, idleMs);
+  }
+  ['mousemove', 'keydown', 'click', 'scroll', 'touchstart']
+    .forEach(function(e) {
+      document.addEventListener(e, reset, {passive: true});
+    });
+  document.addEventListener('shiny:connected', reset);
+})();
+"
+
 peer_for <- function(code) {
   r <- PEER[PEER$code == code, ]
   if (nrow(r) > 0) r else NULL
@@ -183,7 +210,8 @@ ui <- page_navbar(
     # browser fetch plotly's JS at page load. Without it, the first server-
     # rendered charts race the 3.5 MB script through the service worker and
     # lose ("Plotly is not defined", blank cards) on uncached first visits.
-    div(style = "display:none;", plotly::plot_ly())
+    div(style = "display:none;", plotly::plot_ly()),
+    if (!IS_WASM) tags$script(HTML(IDLE_JS))
   ),
   sidebar = sidebar(
     width = 320,
@@ -201,7 +229,12 @@ ui <- page_navbar(
         paste0("Informational only, not financial advice. Public FDIC ",
                "data; not affiliated with the FDIC. Deposits at ",
                "FDIC-insured banks are insured up to $250,000. ",
-               "See the Legal tab."))
+               "See the Legal tab."),
+        # The in-browser build is the fallback when this server sleeps or
+        # runs out of monthly hours; it does not link to itself
+        if (!IS_WASM) div(class = "mt-2",
+                          a(href = PAGES_URL, target = "_blank",
+                            "Backup version (runs in your browser)")))
   ),
 
   nav_panel(
@@ -375,6 +408,11 @@ ui <- page_navbar(
 )
 
 server <- function(input, output, session) {
+
+  # Close idle sessions (see IDLE_JS): frees the shinyapps.io instance to
+  # sleep instead of an abandoned tab burning the monthly active hours.
+  # The visitor gets Shiny's standard reload overlay.
+  if (!IS_WASM) observeEvent(input$session_idle, session$close())
 
   loaded <- reactiveVal(SEED_BANKS)
 

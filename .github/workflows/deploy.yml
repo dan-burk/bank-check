@@ -1,9 +1,13 @@
-# DORMANT: the app deploys to shinyapps.io now (deploy-shinyapps.yml);
-# the wasm cold start was too slow. This workflow still works and can be
-# run manually from the Actions tab to refresh the GitHub Pages version.
+# Backup deployment: the serverless in-browser (shinylive/webR) build on
+# GitHub Pages. Slow cold start but no server, no hour caps; it covers
+# visitors when the shinyapps.io deployment sleeps or hits its monthly
+# active-hours limit. Same app code deploys to both on every push.
 name: Deploy app to GitHub Pages
 
 on:
+  push:
+    branches: [main]
+    paths: ["app/**", ".github/workflows/deploy.yml"]
   workflow_dispatch:
 
 permissions:
