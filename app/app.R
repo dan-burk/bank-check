@@ -31,7 +31,6 @@ EMPTY_MSG <- "Search for a bank in the sidebar to load its history."
 # on GitHub Pages (in-browser). Server-only behaviors key off this flag.
 IS_WASM <- grepl("emscripten|wasm",
                  paste(R.version$os, R.version$platform))
-PAGES_URL <- "https://dan-burk.github.io/bank-check/"
 
 # Server deployments meter active hours, and an app left open in a
 # background tab holds its connection and burns them. Disconnect after 10
@@ -229,12 +228,7 @@ ui <- page_navbar(
         paste0("Informational only, not financial advice. Public FDIC ",
                "data; not affiliated with the FDIC. Deposits at ",
                "FDIC-insured banks are insured up to $250,000. ",
-               "See the Legal tab."),
-        # The in-browser build is the fallback when this server sleeps or
-        # runs out of monthly hours; it does not link to itself
-        if (!IS_WASM) div(class = "mt-2",
-                          a(href = PAGES_URL, target = "_blank",
-                            "Backup version (runs in your browser)")))
+               "See the Legal tab."))
   ),
 
   nav_panel(

@@ -4,9 +4,17 @@ Compare any FDIC-insured bank against its peers and against every US bank
 failure since 2000. Quarterly Call Report data, CAMELS-style tabs, and a
 failure-trajectory view, all from the public FDIC BankFind Suite API.
 
-Plain R Shiny, no keys, no accounts. The data layer needs only base R
-networking, so the same code also runs fully in-browser under
-shinylive/webR if ever needed.
+Plain R Shiny, no keys, no accounts.
+
+## Two deployments, same code
+
+- **shinyapps.io** (standard hosted Shiny, loads in seconds):
+  link added after first deploy
+- **GitHub Pages** (shinylive, R compiled to WebAssembly running in your
+  browser; slow first load while the runtime downloads, then cached):
+  https://dan-burk.github.io/bank-check/
+
+If one is down, use the other.
 
 ## Run locally
 
@@ -18,12 +26,10 @@ shiny::runApp("app", port = 7788)
 
 ## Deploy
 
-Pushes to `main` that touch `app/` deploy to shinyapps.io via
+Pushes to `main` that touch `app/` deploy BOTH targets:
 `.github/workflows/deploy-shinyapps.yml` (needs the three SHINYAPPS_*
-repo secrets described in that file). The earlier shinylive/GitHub Pages
-pipeline is kept dormant in `deploy.yml` and can be run manually from the
-Actions tab; it trades a slow WebAssembly cold start for serverless
-hosting.
+repo secrets described in that file) and `.github/workflows/deploy.yml`
+(the shinylive/Pages build).
 
 ## Data
 
