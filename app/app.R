@@ -183,7 +183,67 @@ ui <- page_navbar(
     # browser fetch plotly's JS at page load. Without it, the first server-
     # rendered charts race the 3.5 MB script through the service worker and
     # lose ("Plotly is not defined", blank cards) on uncached first visits.
-    div(style = "display:none;", plotly::plot_ly())
+    div(style = "display:none;", plotly::plot_ly()),
+    # Fetch overlay: spinner plus rotating jokes while a bank's history
+    # downloads. The joke rotation is client-side JS on purpose: during the
+    # fetch the R process is blocked (fully so under webR, where R runs
+    # single-threaded in a worker), so the server cannot push updates until
+    # the download finishes. R only toggles the overlay on and off.
+    tags$style(HTML("
+      #fetch_overlay { position: fixed; inset: 0; z-index: 2000;
+                       display: none; align-items: center; justify-content:
+                       center; background: rgba(255,255,255,0.85); }
+      #fetch_overlay .box { text-align: center; max-width: 26rem;
+                            padding: 0 1rem; }
+      #fetch_overlay .spinner { width: 3rem; height: 3rem; margin: 0 auto
+                                1rem; border: 4px solid #DEE2E6;
+                                border-top-color: #2C5F8A;
+                                border-radius: 50%;
+                                animation: fetchspin 0.9s linear infinite; }
+      #fetch_overlay .headline { font-weight: 600; color: #1F2933; }
+      #fetch_overlay .joke { color: #666; font-size: 0.95rem;
+                             min-height: 3rem; margin-top: 0.5rem; }
+      @keyframes fetchspin { to { transform: rotate(360deg); } }
+    ")),
+    div(id = "fetch_overlay",
+        div(class = "box",
+            div(class = "spinner"),
+            div(class = "headline", "Fetching from FDIC..."),
+            div(class = "joke", ""))),
+    tags$script(HTML("
+      (function() {
+        var jokes = [
+          'Why did the banker quit? She lost interest.',
+          'I asked the bank to check my balance. They pushed me over.',
+          'Why are piggy banks so wise? Full of common cents.',
+          'Old bankers never die. They just lose their balance.',
+          'My bank flagged suspicious activity. Apparently saving was out of character.',
+          'The safest place for cash is a snow bank. Frozen assets.',
+          'Where do fish keep their money? In the river bank.',
+          'The loan officer married the teller. Now it is a joint account.',
+          'Quarterly filings since 1984. Good things come to those who wait.',
+          'Dad, are we rich? No son, we are FDIC insured.'
+        ];
+        var timer = null;
+        Shiny.addCustomMessageHandler('fetch_overlay', function(msg) {
+          var el = document.getElementById('fetch_overlay');
+          var jokeEl = el.querySelector('.joke');
+          if (msg.show) {
+            var i = Math.floor(Math.random() * jokes.length);
+            jokeEl.textContent = jokes[i];
+            el.style.display = 'flex';
+            if (timer) clearInterval(timer);
+            timer = setInterval(function() {
+              i = (i + 1) % jokes.length;
+              jokeEl.textContent = jokes[i];
+            }, 4000);
+          } else {
+            el.style.display = 'none';
+            if (timer) { clearInterval(timer); timer = null; }
+          }
+        });
+      })();
+    "))
   ),
   sidebar = sidebar(
     width = 320,
@@ -389,8 +449,10 @@ server <- function(input, output, session) {
 
   ensure_loaded <- function(cert) {
     if (!nzchar(cert) || cert %in% names(loaded())) return(invisible(TRUE))
-    id <- showNotification("Fetching from FDIC...", duration = NULL)
-    on.exit(removeNotification(id))
+    # The message reaches the browser before download.file blocks the R
+    # process, so the overlay animates client-side through the whole fetch
+    session$sendCustomMessage("fetch_overlay", list(show = TRUE))
+    on.exit(session$sendCustomMessage("fetch_overlay", list(show = FALSE)))
     df <- tryCatch(fetch_bank_cached(as.integer(cert)), error = function(e) e)
     if (inherits(df, "error")) {
       showNotification(paste0("FDIC fetch failed (", conditionMessage(df),
