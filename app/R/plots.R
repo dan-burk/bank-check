@@ -1,5 +1,7 @@
 # Shared plotly builders. Chart rules: one y axis, explicit titles, unified
-# hover, color follows the bank, legend whenever >= 2 series.
+# hover, color follows the bank, legend whenever >= 2 series. Dollar axes
+# resolve their $M/$B unit ONCE per axis from every series drawn on it
+# (usd_axis_unit), never per series.
 #
 # Two-bank convention on the fixed multi-series charts (funding_share,
 # pipeline_lines, risk_cushion): color follows the SERIES there, so the
@@ -54,10 +56,18 @@ range_buttons <- function(p) {
   ))
 }
 
-# Scale a usd_k series for display; returns list(vals, suffix)
-scale_usd <- function(x) {
-  if (max(abs(x), na.rm = TRUE) >= 1e6) list(vals = x / 1e6, unit = "$B")
-  else list(vals = x / 1e3, unit = "$M")
+# One axis, one unit. Raw values arrive in $ thousands; the display unit is
+# resolved from the POOLED values of every series that will share the axis.
+# Deciding per series put a $357M bank and a $4.9B bank on the same axis in
+# different units (357.84 "$M" next to 4.87 "$B"), inflating the smaller
+# bank 1000x. Callers divide by $div and label with $unit/$letter/$word.
+usd_axis_unit <- function(vals) {
+  vals <- vals[is.finite(vals)]
+  if (length(vals) > 0 && max(abs(vals)) >= 1e6) {
+    list(div = 1e6, unit = "$B", letter = "B", word = "$ billions")
+  } else {
+    list(div = 1e3, unit = "$M", letter = "M", word = "$ millions")
+  }
 }
 
 # Reference layers drawn under every rate chart: yellow/red dotted lines
@@ -94,43 +104,60 @@ metric_ts <- function(banks, code, meta, cols, display = "level", peer = NULL) {
   }
   units <- row$units[1]
   y_title <- row$label[1]
+  hover_pre <- ""; hover_suf <- ""
 
-  p <- plotly::plot_ly()
-  all_y <- numeric(0)
+  # Pass 1: transform every bank's series first, so a dollar axis can
+  # resolve its unit from the pooled values rather than per bank
+  series <- list()
   for (lb in names(banks)) {
     df <- banks[[lb]]
     if (!code %in% names(df)) next
     y <- df[[code]]
-    hover_suffix <- ""
     if (units == "usd_k" && display == "pct_assets") {
       y <- 100 * y / df$ASSET
-      y_title <- paste0(row$label[1], " (% of assets)"); hover_suffix <- "%"
     } else if (units == "usd_k" && display == "pct_loans") {
       y <- 100 * y / df$gross_lns
-      y_title <- paste0(row$label[1], " (% of gross loans)"); hover_suffix <- "%"
-    } else if (units == "usd_k") {
-      sc <- scale_usd(y); y <- sc$vals
-      y_title <- paste0(row$label[1], " (", sc$unit, ")")
-    } else if (units == "pct") {
-      hover_suffix <- "%"
-    } else if (units == "x") {
-      hover_suffix <- "x"
     }
-    all_y <- c(all_y, y[is.finite(y)])
+    series[[lb]] <- list(x = df$date, y = y)
+  }
+  if (units == "usd_k" && display == "pct_assets") {
+    y_title <- paste0(row$label[1], " (% of assets)"); hover_suf <- "%"
+  } else if (units == "usd_k" && display == "pct_loans") {
+    y_title <- paste0(row$label[1], " (% of gross loans)"); hover_suf <- "%"
+  } else if (units == "usd_k") {
+    sc <- usd_axis_unit(unlist(lapply(series, `[[`, "y")))
+    series <- lapply(series, function(s) { s$y <- s$y / sc$div; s })
+    y_title <- paste0(row$label[1], " (", sc$unit, ")")
+    hover_pre <- "$"; hover_suf <- sc$letter
+  } else if (units == "pct") {
+    hover_suf <- "%"
+  } else if (units == "x") {
+    hover_suf <- "x"
+  }
+
+  # Pass 2: draw
+  p <- plotly::plot_ly()
+  all_y <- numeric(0)
+  for (lb in names(series)) {
+    s <- series[[lb]]
+    all_y <- c(all_y, s$y[is.finite(s$y)])
     p <- plotly::add_trace(
-      p, x = df$date, y = round(y, 2), name = lb,
+      p, x = s$x, y = round(s$y, 2), name = lb,
       type = "scatter", mode = "lines",
       line = list(color = cols[[lb]], width = 2),
-      hovertemplate = paste0("%{y}", hover_suffix)
+      hovertemplate = paste0(hover_pre, "%{y}", hover_suf)
     )
     # Title test: the current value sits on the chart, not just in hover
-    last_i <- max(which(!is.na(y)))
-    p <- plotly::add_annotations(
-      p, x = df$date[last_i], y = round(y[last_i], 2),
-      text = paste0("<b>", round(y[last_i], 2), hover_suffix, "</b>"),
-      xanchor = "left", showarrow = FALSE, xshift = 8,
-      font = list(color = cols[[lb]], size = 12)
-    )
+    if (any(!is.na(s$y))) {
+      last_i <- max(which(!is.na(s$y)))
+      p <- plotly::add_annotations(
+        p, x = s$x[last_i], y = round(s$y[last_i], 2),
+        text = paste0("<b>", hover_pre, round(s$y[last_i], 2), hover_suf,
+                      "</b>"),
+        xanchor = "left", showarrow = FALSE, xshift = 8,
+        font = list(color = cols[[lb]], size = 12)
+      )
+    }
   }
   # Reference layers only make sense on the metric's native rate scale
   yrange <- NULL
@@ -146,20 +173,30 @@ metric_ts <- function(banks, code, meta, cols, display = "level", peer = NULL) {
 # banks, no legend (the overview page carries one shared legend row)
 camels_mini <- function(banks, code, meta, cols, peer = NULL) {
   row <- meta[meta$code == code, ]
+  pre <- ""
   suf <- if (row$units[1] == "pct") "%" else if (row$units[1] == "x") "x" else ""
-  p <- plotly::plot_ly()
-  all_y <- numeric(0)
+  series <- list()
   for (lb in names(banks)) {
     df <- banks[[lb]]
     if (!code %in% names(df)) next
     dd <- df[df$date >= max(df$date) - 3653, ]
-    y <- dd[[code]]
-    if (row$units[1] == "usd_k") { sc <- scale_usd(y); y <- sc$vals; suf <- sc$unit }
-    all_y <- c(all_y, y[is.finite(y)])
-    p <- plotly::add_trace(p, x = dd$date, y = round(y, 2), name = lb,
+    series[[lb]] <- list(x = dd$date, y = dd[[code]])
+  }
+  # Dollar unit resolved once across all banks (one axis, one unit)
+  if (row$units[1] == "usd_k") {
+    sc <- usd_axis_unit(unlist(lapply(series, `[[`, "y")))
+    series <- lapply(series, function(s) { s$y <- s$y / sc$div; s })
+    pre <- "$"; suf <- sc$letter
+  }
+  p <- plotly::plot_ly()
+  all_y <- numeric(0)
+  for (lb in names(series)) {
+    s <- series[[lb]]
+    all_y <- c(all_y, s$y[is.finite(s$y)])
+    p <- plotly::add_trace(p, x = s$x, y = round(s$y, 2), name = lb,
                            type = "scatter", mode = "lines",
                            line = list(color = cols[[lb]], width = 2),
-                           hovertemplate = paste0("%{y}", suf))
+                           hovertemplate = paste0(pre, "%{y}", suf))
   }
   yaxis <- list(title = NA, zeroline = FALSE)
   if (row$units[1] %in% c("pct", "x")) {
@@ -262,20 +299,22 @@ loan_mix <- function(df, mode = "pct", from_date = as.Date("2010-01-01")) {
     list(col = "LNCI",     name = "Business loans",          color = "#2C5F8A"),
     list(col = "other_ln", name = "Everything else",         color = "#BBBBBB")
   )
+  # Unit from gross loans: the bands stack to the whole book
+  sc <- if (mode == "usd") usd_axis_unit(dd$gross_lns) else NULL
   p <- plotly::plot_ly(dd, x = ~date)
   for (cm in comps) {
     y <- dd[[cm$col]]
     if (mode == "pct") {
       y <- 100 * y / dd$gross_lns; hv <- "%{y}%"
     } else {
-      y <- y / 1e6; hv <- "$%{y}B"
+      y <- y / sc$div; hv <- paste0("$%{y}", sc$letter)
     }
     p <- plotly::add_trace(p, y = round(y, 2), name = cm$name,
                            type = "scatter", mode = "none",
                            stackgroup = "one", fillcolor = cm$color,
                            hovertemplate = hv)
   }
-  base_layout(p, if (mode == "pct") "% of gross loans" else "$ billions")
+  base_layout(p, if (mode == "pct") "% of gross loans" else sc$word)
 }
 
 # Quarterly net charge-offs from the YTD field (in-year difference)
@@ -297,13 +336,23 @@ risk_cushion <- function(df, mode = "pct", df2 = NULL,
                          from_date = as.Date("2019-01-01")) {
   banks <- if (is.null(df2)) list(df) else list(df, df2)
   bar_cols <- c("#D9B8B3", "#C3CBD4")
-  y_title <- if (mode == "usd") "$ millions" else "% of gross loans"
+  dds <- lapply(banks, function(b) {
+    add_nco_q(b) |> dplyr::filter(date >= from_date)
+  })
+  # Dollar unit pooled across BOTH banks: one axis, one unit
+  sc <- if (mode == "usd") {
+    usd_axis_unit(unlist(lapply(dds, function(d) {
+      c(d$LNATRES, d$NCLNLS, d$nco_q)
+    })))
+  } else NULL
+  y_title <- if (mode == "usd") sc$word else "% of gross loans"
   p <- plotly::plot_ly()
   for (i in seq_along(banks)) {
-    dd <- add_nco_q(banks[[i]]) |> dplyr::filter(date >= from_date)
+    dd <- dds[[i]]
     if (mode == "usd") {
-      alw <- dd$LNATRES / 1e3; nc <- dd$NCLNLS / 1e3; nco <- dd$nco_q / 1e3
-      hv <- function(pre) paste0(pre, ": $%{y}M")
+      alw <- dd$LNATRES / sc$div; nc <- dd$NCLNLS / sc$div
+      nco <- dd$nco_q / sc$div
+      hv <- function(pre) paste0(pre, ": $%{y}", sc$letter)
     } else {
       alw <- dd$LNATRESR; nc <- dd$NCLNLSR
       nco <- 100 * dd$nco_q / dd$gross_lns
@@ -407,9 +456,11 @@ prov_nco_bars <- function(df, mode = "usd", from = 20220101) {
     nco  <- round(100 * dd$nco_q / dd$gross_lns, 3)
     y_title <- "Quarterly flow (% of gross loans)"; hv <- "%{y}%"
   } else {
-    prov <- round(dd$prov_q / 1e3, 2)
-    nco  <- round(dd$nco_q / 1e3, 2)
-    y_title <- "Quarterly flow ($M)"; hv <- "$%{y}M"
+    sc <- usd_axis_unit(c(dd$prov_q, dd$nco_q))
+    prov <- round(dd$prov_q / sc$div, 2)
+    nco  <- round(dd$nco_q / sc$div, 2)
+    y_title <- paste0("Quarterly flow (", sc$unit, ")")
+    hv <- paste0("$%{y}", sc$letter)
   }
   p <- plotly::plot_ly(dd, x = ~qlab) |>
     plotly::add_bars(y = prov, name = "Provision",
@@ -433,23 +484,43 @@ trajectory_plot <- function(sel_panel, code, meta, baseline = NULL,
                             cols = NULL, ref_df = NULL, ref_label = NULL) {
   row <- meta[meta$code == code, ]
   units <- row$units[1]
+  prefix <- ""
   suffix <- if (units == "pct") "%" else if (units == "x") "x" else ""
+  y_title <- row$label[1]
+
+  dd <- sel_panel |>
+    dplyr::filter(!is.na(fail_date), qtrs_before >= 0, qtrs_before <= 20)
+  ref_val <- if (!is.null(ref_df)) {
+    rv <- ref_df[[code]]
+    utils::tail(rv[is.finite(rv)], 1)
+  } else numeric(0)
+
+  # Dollar metrics arrive in $ thousands; one unit resolved across the
+  # baseline, the picked banks, and the reference line together
+  div <- 1
+  if (units == "usd_k") {
+    pool <- c(if (!is.null(baseline)) baseline$med,
+              if (code %in% names(dd)) dd[[code]],
+              ref_val)
+    sc <- usd_axis_unit(pool)
+    div <- sc$div
+    prefix <- "$"; suffix <- sc$letter
+    y_title <- paste0(y_title, " (", sc$unit, ")")
+  }
 
   p <- plotly::plot_ly()
   if (!is.null(baseline) && nrow(baseline) > 0) {
     bl <- baseline[order(-baseline$qtrs_before), ]
     p <- plotly::add_trace(
-      p, x = -bl$qtrs_before, y = round(bl$med, 2),
+      p, x = -bl$qtrs_before, y = round(bl$med / div, 2),
       name = "Median, filtered failures",
       type = "scatter", mode = "lines",
       line = list(color = COL_GRAY, width = 3),
       text = paste0(bl$n, " banks"),
-      hovertemplate = paste0("%{y}", suffix, " (median of %{text})")
+      hovertemplate = paste0(prefix, "%{y}", suffix, " (median of %{text})")
     )
   }
 
-  dd <- sel_panel |>
-    dplyr::filter(!is.na(fail_date), qtrs_before >= 0, qtrs_before <= 20)
   if (nrow(dd) > 0 && code %in% names(dd)) {
     labs <- unique(dd$label)
     if (!is.null(cols)) labs <- intersect(names(cols), labs)
@@ -458,28 +529,24 @@ trajectory_plot <- function(sel_panel, code, meta, baseline = NULL,
       di <- di[order(-di$qtrs_before), ]
       col <- if (!is.null(cols)) cols[[lb]] else COL_GRAY
       p <- plotly::add_trace(
-        p, x = -di$qtrs_before, y = round(di[[code]], 2), name = lb,
+        p, x = -di$qtrs_before, y = round(di[[code]] / div, 2), name = lb,
         type = "scatter", mode = "lines+markers",
         line = list(color = col, width = 1.6),
         marker = list(size = 4, color = col),
-        hovertemplate = paste0("%{y}", suffix)
+        hovertemplate = paste0(prefix, "%{y}", suffix)
       )
     }
   }
 
-  if (!is.null(ref_df)) {
-    ref_vals <- ref_df[[code]]
-    ref_val <- utils::tail(ref_vals[is.finite(ref_vals)], 1)
-    if (length(ref_val) == 1) {
-      p <- plotly::add_trace(
-        p, x = c(-20, 0), y = rep(round(ref_val, 2), 2),
-        name = paste0(ref_label, " today"),
-        type = "scatter", mode = "lines",
-        line = list(color = COL_MAIN, width = 2.5, dash = "dash"),
-        hovertemplate = paste0("%{y}", suffix)
-      )
-    }
+  if (length(ref_val) == 1) {
+    p <- plotly::add_trace(
+      p, x = c(-20, 0), y = rep(round(ref_val / div, 2), 2),
+      name = paste0(ref_label, " today"),
+      type = "scatter", mode = "lines",
+      line = list(color = COL_MAIN, width = 2.5, dash = "dash"),
+      hovertemplate = paste0(prefix, "%{y}", suffix)
+    )
   }
-  base_layout(p, row$label[1], "Quarters before failure (0 = failure)") |>
+  base_layout(p, y_title, "Quarters before failure (0 = failure)") |>
     plotly::layout(hovermode = "closest")
 }

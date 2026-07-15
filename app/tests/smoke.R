@@ -51,7 +51,25 @@ ok("metric_ts pct_assets",
 ok("metric_ts pct_loans",
    metric_ts(banks, "OTHBFHLB", FIELDS_META, cols, display = "pct_loans"))
 
-for (code in c("RBC1AAJ", "NCLNLSR", "p3_pct", "ROAQ", "COREDEPR",
+# One axis, one unit: two banks straddling the $1B line must share one
+# divisor (the regression behind the BankStar-vs-Dacotah 1000x inflation)
+big   <- data.frame(date = dac$date, ASSET = dac$ASSET)        # ~$4.9B
+small <- data.frame(date = dac$date, ASSET = dac$ASSET / 10)   # ~$490M
+pb <- plotly::plotly_build(
+  metric_ts(list(Big = big, Small = small), "ASSET", FIELDS_META,
+            c(Big = "#2C5F8A", Small = "#E69F00"))
+)
+line_traces <- Filter(function(t) identical(t$mode, "lines"), pb$x$data)
+stopifnot(length(line_traces) == 2)
+maxes <- sapply(line_traces, function(t) max(unlist(t$y), na.rm = TRUE))
+ratio <- max(maxes) / min(maxes)
+stopifnot(abs(ratio - 10) < 0.5)   # true 10x asset gap survives on the axis
+ttl <- pb$x$layout$yaxis$title
+if (is.list(ttl)) ttl <- ttl$text
+stopifnot(grepl("($B)", ttl, fixed = TRUE))
+cat("ok: shared $ axis unit across mixed-size banks\n")
+
+for (code in c("ASSET", "RBC1AAJ", "NCLNLSR", "p3_pct", "ROAQ", "COREDEPR",
                "unrl_pct_eq")) {
   ok(paste("camels_mini", code),
      camels_mini(banks, code, FIELDS_META, cols, pf(code)))
@@ -91,6 +109,17 @@ ok("trajectory_plot banks+baseline",
                    ref_df = dac, ref_label = "Dacotah (SD)"))
 ok("trajectory_plot baseline only",
    trajectory_plot(sub[0, ], "NCLNLSR", FIELDS_META, baseline = bl))
+# Dollar metric: scaled from $ thousands and unit-labeled, jointly with
+# the baseline and reference line
+pt <- plotly::plotly_build(
+  trajectory_plot(sub, "ASSET", FIELDS_META,
+                  baseline = fail_median(FAIL_PANEL, "ASSET"), cols = tcols,
+                  ref_df = dac, ref_label = "Dacotah (SD)")
+)
+ttl <- pt$x$layout$yaxis$title
+if (is.list(ttl)) ttl <- ttl$text
+stopifnot(grepl("($", ttl, fixed = TRUE))
+cat("ok: trajectory_plot usd scaled + labeled\n")
 cat("all builders ok\n")
 
 # Server outputs via testServer, with a comparison bank active
