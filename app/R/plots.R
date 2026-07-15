@@ -260,8 +260,10 @@ scale_strip <- function(inst, sel) {
 # comparison bank, drawn dotted in the same series colors.
 funding_share <- function(df, df2 = NULL, from_date = as.Date("2015-01-01")) {
   banks <- if (is.null(df2)) list(df) else list(df, df2)
+  # core_pct_dep, not COREDEPR: FDIC's ratio is % of assets and would put
+  # this line on a different denominator than its two chart-mates
   series <- list(
-    list(y = function(d) d$COREDEPR,           name = "Core",      color = COL_MAIN),
+    list(y = function(d) d$core_pct_dep,       name = "Core",      color = COL_MAIN),
     list(y = function(d) d$bro_pct_dep,        name = "Brokered",  color = COL_ALERT),
     list(y = function(d) 100 * d$DEPUNINS / d$DEP, name = "Uninsured", color = COL_EARLY)
   )

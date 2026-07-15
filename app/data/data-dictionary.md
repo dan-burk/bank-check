@@ -86,7 +86,7 @@ Whose money funds the bank. Sticky money (local checking accounts) stays; hot mo
 |---|---|---|---|
 | DEP / DEPDOM | Total / domestic deposits | $K | |
 | DEPINS / DEPUNINS | Estimated insured / uninsured deposits | $K | Uninsured money runs (SVB). Estimates, self-reported. |
-| COREDEP / COREDEPR | Core deposits, $ and % of total | $K / % | Core = local, insured-ish, sticky. The single best funding-quality summary. |
+| COREDEP / COREDEPR | Core deposits, $ and % of assets | $K / % | Core = local, insured-ish, sticky. The single best funding-quality summary. Like BROR, the denominator is total assets, not deposits (verified: 3178844/4867664 = 65.3, Dacotah 2026 Q1); the app's Funding Mix chart computes COREDEP/DEP itself so its lines share one denominator. |
 | BRO / BROR | Brokered deposits, $ and % of assets | $K / % | Bought money. Rate-shoppers with zero loyalty; regulators restrict access to it for weak banks, so dependence on it can become a death spiral. BROR's denominator is total assets, not deposits (verified: 862405/4867664 = 17.7, Dacotah 2026 Q1). |
 | VOLIAB / VOLIABR | Volatile liabilities, $ and % | $K / % | Large time deposits + fed funds + repos + foreign deposits + other borrowings. |
 | NTRTMLGJ | Time deposits > $250K | $K | Above the insurance limit, so hot. |

@@ -19,7 +19,7 @@ ROAQ,Return on assets (quarter),Earnings,pct,,,below,"Net income / Average asset
 ROE,Return on equity (year to date),Earnings,pct,,,below,"Net income / Average equity, annualized*","Annualized: a partial-year result scaled to a full-year rate","A high number can just mean thin capital; check equity capital too",,
 NIMY,Net interest margin (year to date),Earnings,pct,,,below,"(Interest earned - Interest paid) / Earning assets*","Earning assets: the assets that earn interest, mainly loans and securities",,,
 LNLSDEPR,Loans / deposits,Liquidity & Funding,pct,100,,above,"Net loans / Total deposits",,,"Loans exceed deposits",
-COREDEPR,Core deposits / total,Liquidity & Funding,pct,,,below,"Checking, savings, and small local time deposits / Total deposits",,"This money tends to stay",,
+COREDEPR,Core deposits / assets,Liquidity & Funding,pct,,,below,"Checking, savings, and small local time deposits / Total assets (the FDIC's denominator, not deposits)",,"This money tends to stay",,
 bro_pct_dep,Brokered deposits / total deposits,Liquidity & Funding,pct,,,above,"Deposits bought through brokers / Total deposits",,"Leaves for the first better rate elsewhere",,
 DEPUNINS,Uninsured deposits (estimate),Liquidity & Funding,usd_k,,,,"Deposits above the $250k insurance limit",,"Self-reported estimate; tends to run first in trouble",,
 VOLIABR,Volatile liabilities ratio,Liquidity & Funding,pct,,,above,"Volatile liabilities* / Assets","Volatile liabilities: large CDs, short-term borrowings, and foreign deposits; funding that can leave or reprice fast",,,

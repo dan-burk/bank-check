@@ -106,7 +106,7 @@ KPI_DEFS <- list(
   list(code = "RBC1AAJ",   title = "Tier 1 Leverage"),
   list(code = "NCLNLSR",   title = "Noncurrent Loans"),
   list(code = "alw_cover", title = "Allowance Coverage"),
-  list(code = "COREDEPR",  title = "Core Deposits")
+  list(code = "COREDEPR",  title = "Core Deposits / Assets")
 )
 KPI_GOOD_UP <- c(ASSET = TRUE, ROAQ = TRUE, RBC1AAJ = TRUE, NCLNLSR = FALSE,
                  alw_cover = TRUE, COREDEPR = TRUE)
@@ -116,7 +116,7 @@ CAMELS_TILES <- list(
   list(code = "NCLNLSR",     title = "Noncurrent Loans"),
   list(code = "p3_pct",      title = "30-89 Days Late"),
   list(code = "ROAQ",        title = "Return on Assets"),
-  list(code = "COREDEPR",    title = "Core Deposits"),
+  list(code = "COREDEPR",    title = "Core Deposits / Assets"),
   list(code = "unrl_pct_eq", title = "Unrealized Securities Loss / Equity")
 )
 

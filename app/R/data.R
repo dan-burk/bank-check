@@ -29,6 +29,11 @@ derive <- function(df) {
       p3_pct      = 100 * P3LNLS / gross_lns,
       alw_cover   = ifelse(NCLNLS > 0, LNATRES / NCLNLS, NA),
       bro_pct_dep = 100 * BRO / DEP,
+      # Core as % of DEPOSITS, computed here: FDIC's COREDEPR is % of total
+      # ASSETS, which silently mixed denominators on the Funding Mix chart
+      # (caught 2026-07 via Capital Bank and Trust: $500k deposits on $226M
+      # assets put "core" at 0.2 where share-of-deposits says 100)
+      core_pct_dep = ifelse(DEP > 0, 100 * COREDEP / DEP, NA),
       unrl_pct_eq = 100 * ((SCAF - SCAA) + (SCHF - SCHA)) / EQ
     )
 }

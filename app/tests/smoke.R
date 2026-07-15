@@ -93,6 +93,19 @@ ok("loan_mix pct", loan_mix(dac))
 ok("loan_mix usd", loan_mix(dac, mode = "usd"))
 ok("funding_share", funding_share(dac))
 ok("funding_share df2", funding_share(dac, df2 = fbt))
+# Funding Mix Core line = COREDEP/DEP, sharing the deposits denominator
+# with Brokered and Uninsured (FDIC's COREDEPR is % of ASSETS, not deposits)
+pf_core <- plotly::plotly_build(funding_share(dac))
+core_tr <- Filter(function(t) identical(t$name, "Core"), pf_core$x$data)
+stopifnot(length(core_tr) == 1)
+dd15 <- dac[dac$date >= as.Date("2015-01-01"), ]
+expect_core <- round(100 * dd15$COREDEP / dd15$DEP, 1)
+got_core <- unlist(core_tr[[1]]$y)
+stopifnot(length(got_core) == length(expect_core),
+          all(abs(got_core - expect_core) < 1e-6, na.rm = TRUE),
+          # and it is NOT the %-of-assets series it used to plot
+          any(abs(got_core - round(dd15$COREDEPR, 1)) > 0.5, na.rm = TRUE))
+cat("ok: funding core = COREDEP/DEP, not COREDEPR\n")
 
 # Failure trajectories: baseline sanity, picked banks, baseline-only
 bl <- fail_median(FAIL_PANEL, "NCLNLSR")
