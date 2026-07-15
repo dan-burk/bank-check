@@ -162,6 +162,14 @@ shiny::testServer(app = "app", {
   stopifnot(!is.null(output$prov_plot))
   cat("ok output: prov_plot usd\n")
 
+  # Directory modal: table renders with one row per active bank, and a
+  # row pick runs without error (inst here is the same INSTITUTIONS the
+  # app loads: both come from fetch_institutions_cached)
+  dir_payload <- jsonlite::fromJSON(output$dir_table)
+  stopifnot(nrow(dir_payload$x$data) == nrow(inst))
+  session$setInputs(browse_all = 1, dir_table_rows_selected = 2L)
+  cat("ok output: dir_table + row pick\n")
+
   # Region filter shrinks the baseline set
   session$setInputs(traj_region = "Midwest")
   stopifnot(nrow(traj_meta_r()) < nrow(FAIL_META),

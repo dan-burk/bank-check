@@ -136,6 +136,18 @@ scoped_choices <- function(groups) {
 DISPLAY_CHOICES <- c("$" = "level", "% assets" = "pct_assets",
                      "% loans" = "pct_loans")
 
+# Directory table behind the sidebar's Browse link. State is a factor so
+# DT's column filter renders a dropdown, not a text box. Row order must
+# stay identical to INSTITUTIONS: dir_table_rows_selected indexes into it
+# to recover the CERT.
+DIR_TBL <- data.frame(
+  Bank  = INSTITUTIONS$NAME,
+  City  = INSTITUTIONS$CITY,
+  State = factor(INSTITUTIONS$STALP),
+  `Assets ($M)` = round(INSTITUTIONS$ASSET / 1e3),
+  check.names = FALSE
+)
+
 # Explorer card: metric picker, unit toggle, and category chip in the
 # header; chart fills the card; footnote explains the metric.
 ui_explorer <- function(id, groups, default, height = "440px") {
@@ -250,6 +262,10 @@ ui <- page_navbar(
     selectizeInput("bank_pick", "Find a bank", choices = NULL,
                    options = list(placeholder = "Search by bank name...",
                                   maxOptions = 8)),
+    # Escape hatch for "I don't know the name": pulls the selectize's
+    # bottom margin up so the link reads as part of the search box
+    div(class = "small", style = "margin-top:-0.75rem;",
+        actionLink("browse_all", "Browse all banks")),
     selectizeInput("compare", "Compare with", choices = NULL, multiple = TRUE,
                    options = list(placeholder = "Search any bank...",
                                   maxOptions = 8)),
@@ -473,6 +489,30 @@ server <- function(input, output, session) {
   observeEvent(input$bank_pick, ensure_loaded(input$bank_pick))
   observeEvent(input$compare, {
     for (ct in setdiff(input$compare, names(loaded()))) ensure_loaded(ct)
+  })
+
+  # Bank directory modal: browse when you don't know the name. Column
+  # filters do the searching (State is a dropdown, Assets a range slider);
+  # picking a row routes through bank_pick, so the fetch overlay and cache
+  # behave exactly as if the bank came from the search box.
+  observeEvent(input$browse_all, {
+    showModal(modalDialog(
+      DT::DTOutput("dir_table", fill = FALSE),
+      size = "xl", easyClose = TRUE, footer = NULL
+    ))
+  })
+  output$dir_table <- DT::renderDT({
+    DT::datatable(
+      DIR_TBL, rownames = FALSE, selection = "single", filter = "top",
+      options = list(pageLength = 12, dom = "tip", scrollX = TRUE)
+    ) |>
+      DT::formatCurrency("Assets ($M)", digits = 0)
+  })
+  observeEvent(input$dir_table_rows_selected, {
+    removeModal()
+    updateSelectizeInput(session, "bank_pick", choices = INST_CHOICES,
+                         selected = INSTITUTIONS$CERT[input$dir_table_rows_selected],
+                         server = TRUE)
   })
 
   # One EMPTY_MSG per screen: the shared reactives halt silently (req), and
