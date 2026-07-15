@@ -109,6 +109,18 @@ ok("trajectory_plot banks+baseline",
                    ref_df = dac, ref_label = "Dacotah (SD)"))
 ok("trajectory_plot baseline only",
    trajectory_plot(sub[0, ], "NCLNLSR", FIELDS_META, baseline = bl))
+# The reference bank draws its own last 21 quarters (t-20..0), not a flat
+# line at its current value
+pr <- plotly::plotly_build(
+  trajectory_plot(sub, "NCLNLSR", FIELDS_META, baseline = bl, cols = tcols,
+                  ref_df = dac, ref_label = "Dacotah (SD)")
+)
+ref_tr <- Filter(function(t) identical(t$line$dash, "dash"), pr$x$data)
+stopifnot(length(ref_tr) == 1)
+rx <- unlist(ref_tr[[1]]$x); ry <- unlist(ref_tr[[1]]$y)
+stopifnot(length(rx) == 21, min(rx) == -20, max(rx) == 0,
+          length(unique(ry[is.finite(ry)])) > 1)   # a history, not a constant
+cat("ok: trajectory ref line = last 21 quarters\n")
 # Dollar metric: scaled from $ thousands and unit-labeled, jointly with
 # the baseline and reference line
 pt <- plotly::plotly_build(

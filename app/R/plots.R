@@ -479,7 +479,10 @@ prov_nco_bars <- function(df, mode = "usd", from = 20220101) {
 # the explicitly picked banks (max 10 by the UI); baseline is the per-quarter
 # median of the WHOLE filtered set (fail_median in data.R), drawn first so
 # the picked banks sit on top. cols is a label-keyed color vector assigned
-# positionally in the server (TRAJ_PALETTE).
+# positionally in the server (TRAJ_PALETTE). ref_df is the selected live
+# bank: its last 21 quarters draw as a dashed line with TODAY at 0, so the
+# same x position means "failure" for the gray lines and "now" for the
+# dashed one -- the legend and hover carry that distinction.
 trajectory_plot <- function(sel_panel, code, meta, baseline = NULL,
                             cols = NULL, ref_df = NULL, ref_label = NULL) {
   row <- meta[meta$code == code, ]
@@ -490,9 +493,13 @@ trajectory_plot <- function(sel_panel, code, meta, baseline = NULL,
 
   dd <- sel_panel |>
     dplyr::filter(!is.na(fail_date), qtrs_before >= 0, qtrs_before <= 20)
-  ref_val <- if (!is.null(ref_df)) {
-    rv <- ref_df[[code]]
-    utils::tail(rv[is.finite(rv)], 1)
+  # Last 21 rows by date, not last 21 finite values: NA quarters must stay
+  # as gaps or the line compresses time and misaligns against the x axis
+  ref_tail <- if (!is.null(ref_df) && code %in% names(ref_df)) {
+    utils::tail(ref_df, 21)
+  } else NULL
+  ref_vals <- if (!is.null(ref_tail)) {
+    ref_tail[[code]][is.finite(ref_tail[[code]])]
   } else numeric(0)
 
   # Dollar metrics arrive in $ thousands; one unit resolved across the
@@ -501,7 +508,7 @@ trajectory_plot <- function(sel_panel, code, meta, baseline = NULL,
   if (units == "usd_k") {
     pool <- c(if (!is.null(baseline)) baseline$med,
               if (code %in% names(dd)) dd[[code]],
-              ref_val)
+              ref_vals)
     sc <- usd_axis_unit(pool)
     div <- sc$div
     prefix <- "$"; suffix <- sc$letter
@@ -538,13 +545,15 @@ trajectory_plot <- function(sel_panel, code, meta, baseline = NULL,
     }
   }
 
-  if (length(ref_val) == 1) {
+  if (length(ref_vals) > 0) {
     p <- plotly::add_trace(
-      p, x = c(-20, 0), y = rep(round(ref_val / div, 2), 2),
-      name = paste0(ref_label, " today"),
+      p, x = seq_len(nrow(ref_tail)) - nrow(ref_tail),
+      y = round(ref_tail[[code]] / div, 2),
+      name = paste0(ref_label, " (0 = today)"),
       type = "scatter", mode = "lines",
       line = list(color = COL_MAIN, width = 2.5, dash = "dash"),
-      hovertemplate = paste0(prefix, "%{y}", suffix)
+      text = ref_tail$qlab,
+      hovertemplate = paste0(prefix, "%{y}", suffix, " (%{text})")
     )
   }
   base_layout(p, y_title, "Quarters before failure (0 = failure)") |>

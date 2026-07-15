@@ -186,6 +186,9 @@ ui <- page_navbar(
                     border-bottom: 1px solid #DEE2E6; padding-bottom: 0.3rem; }
       .dict-md table { font-size: 0.92rem; }
       #dict_table { font-size: 0.95rem; }
+      /* Assets column is searchable=FALSE (rank-only); DT still draws a
+         disabled 'All' box there, which begs a click that does nothing */
+      #dir_table thead td:nth-child(4) input { display: none; }
       /* Wide tables scroll sideways on phones instead of overflowing */
       @media (max-width: 767px) {
         .dict-md table { display: block; overflow-x: auto; }
@@ -425,9 +428,10 @@ ui <- page_navbar(
                                       placeholder = "Search failed banks...")),
         helpText("All FDIC failures since 2000, aligned on quarters before ",
                  "failure. Gray line: median of the filtered set. Dashed ",
-                 "line: the selected bank today. Failed banks often stop ",
-                 "filing one or two quarters before the failure date, so ",
-                 "lines can end early.")
+                 "line: the selected bank's last 20 quarters, ending at ",
+                 "today. Failed banks often stop filing one or two ",
+                 "quarters before the failure date, so lines can end ",
+                 "early.")
       ),
       card(card_header(textOutput("traj_title")),
            plotlyOutput("traj_plot", height = "500px"))
@@ -504,7 +508,11 @@ server <- function(input, output, session) {
   output$dir_table <- DT::renderDT({
     DT::datatable(
       DIR_TBL, rownames = FALSE, selection = "single", filter = "top",
-      options = list(pageLength = 12, dom = "tip", scrollX = TRUE)
+      # Assets is rank-and-sort only, no filter: the range slider re-renders
+      # each time the modal opens and stacks duplicates, and its unlabeled
+      # "$3" minimum (the smallest active bank, in $M) reads as nonsense
+      options = list(pageLength = 12, dom = "tip", scrollX = TRUE,
+                     columnDefs = list(list(targets = 3, searchable = FALSE)))
     ) |>
       DT::formatCurrency("Assets ($M)", digits = 0)
   })
