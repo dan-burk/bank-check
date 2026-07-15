@@ -1,26 +1,124 @@
-# Backup deployment: the serverless in-browser (shinylive/webR) build on
-# GitHub Pages. Slow cold start but no server, no hour caps; it covers
-# visitors when the shinyapps.io deployment sleeps or hits its monthly
-# active-hours limit. Same app code deploys to both on every push.
-name: Deploy app to GitHub Pages
+# CI and deployment, one pipeline. Every push to main that touches the
+# app runs the smoke test first; BOTH deploys — shinyapps.io (primary,
+# server-side) and GitHub Pages (shinylive/webR backup) — are blocked
+# unless it passes. Pull requests run the test only.
+#
+# Package versions are pinned by renv.lock at the repo root (snapshot of
+# the direct dependencies declared in DESCRIPTION plus their closure).
+# The test and the shinyapps deploy restore from it, so the app is tested
+# and deployed against the same package set every time instead of
+# whatever CRAN shipped that day — the UI leans on version-sensitive
+# bslib behavior. To upgrade: update packages locally, re-run
+#   renv::snapshot(project = ".", lockfile = "renv.lock",
+#                  type = "explicit", prompt = FALSE, force = TRUE)
+# and commit the lockfile diff.
+#
+# shinyapps.io needs three repo secrets (Settings > Secrets and variables
+# > Actions), copied from shinyapps.io Account > Tokens:
+#   SHINYAPPS_NAME    the shinyapps.io account name
+#   SHINYAPPS_TOKEN   the token
+#   SHINYAPPS_SECRET  the secret
+name: Test and deploy
 
 on:
   push:
     branches: [main]
-    paths: ["app/**", ".github/workflows/deploy.yml"]
+    paths: ["app/**", "renv.lock", ".github/workflows/deploy.yml"]
+  pull_request:
+    paths: ["app/**", "renv.lock", ".github/workflows/deploy.yml"]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: true
 
 jobs:
-  build:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - name: Cache R packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.R_LIBS_USER }}
+          key: rlib-${{ runner.os }}-${{ hashFiles('renv.lock') }}
+
+      # repos = getOption("repos") points renv at the RSPM binary repo
+      # setup-r configured for this runner's distro (fast binary installs)
+      # instead of the source repo recorded in the lockfile
+      - name: Restore pinned packages
+        run: |
+          Rscript -e 'install.packages("renv")'
+          Rscript -e 'renv::restore(lockfile = "renv.lock",
+                                    library = .libPaths()[1],
+                                    repos = getOption("repos"),
+                                    prompt = FALSE)'
+
+      # Runs offline: the shipped .rds copies in app/data/ satisfy every
+      # fetch fallback, so FDIC API downtime cannot flake the gate
+      - name: Run smoke test
+        run: Rscript app/tests/smoke.R
+
+  deploy-shinyapps:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: shinyapps
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - name: Cache R packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.R_LIBS_USER }}
+          key: rlib-${{ runner.os }}-${{ hashFiles('renv.lock') }}
+
+      # rsconnect records the versions installed here and shinyapps.io
+      # restores exactly those, so the pinned set is what serves prod.
+      # rsconnect itself is deploy tooling, installed unpinned.
+      - name: Restore pinned packages
+        run: |
+          Rscript -e 'install.packages(c("renv", "rsconnect"))'
+          Rscript -e 'renv::restore(lockfile = "renv.lock",
+                                    library = .libPaths()[1],
+                                    repos = getOption("repos"),
+                                    prompt = FALSE)'
+
+      - name: Deploy
+        env:
+          SHINYAPPS_NAME: ${{ secrets.SHINYAPPS_NAME }}
+          SHINYAPPS_TOKEN: ${{ secrets.SHINYAPPS_TOKEN }}
+          SHINYAPPS_SECRET: ${{ secrets.SHINYAPPS_SECRET }}
+        run: |
+          Rscript -e '
+            rsconnect::setAccountInfo(
+              name   = Sys.getenv("SHINYAPPS_NAME"),
+              token  = Sys.getenv("SHINYAPPS_TOKEN"),
+              secret = Sys.getenv("SHINYAPPS_SECRET")
+            )
+            rsconnect::deployApp("app", appName = "bank-check",
+                                 forceUpdate = TRUE)
+          '
+
+  # Backup deployment: the serverless in-browser (shinylive/webR) build on
+  # GitHub Pages. Slow cold start but no server, no hour caps; it covers
+  # visitors when the shinyapps.io deployment sleeps or hits its monthly
+  # active-hours limit. Browser-side package versions come from the webR
+  # bundle inside the shinylive package, not renv.lock, so shinylive is
+  # installed unpinned here — the smoke-tested R code is what's exported.
+  build-pages:
+    needs: test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,9 +142,15 @@ jobs:
         with:
           path: _site
 
-  deploy:
-    needs: build
+  deploy-pages:
+    needs: build-pages
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: true
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

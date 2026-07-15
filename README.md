@@ -24,12 +24,19 @@ From the repo root, with R installed:
 shiny::runApp("app", port = 7788)
 ```
 
-## Deploy
+## Test and deploy
 
-Pushes to `main` that touch `app/` deploy BOTH targets:
-`.github/workflows/deploy-shinyapps.yml` (needs the three SHINYAPPS_*
-repo secrets described in that file) and `.github/workflows/deploy.yml`
-(the shinylive/Pages build).
+Pushes to `main` that touch `app/` or `renv.lock` run
+`.github/workflows/deploy.yml`: the smoke test (`app/tests/smoke.R`)
+runs first, and only if it passes do BOTH targets deploy — shinyapps.io
+(needs the three SHINYAPPS_* repo secrets described in the workflow) and
+the shinylive/Pages build. Pull requests run the test only.
+
+R package versions are pinned by `renv.lock` (snapshot of the direct
+dependencies declared in `DESCRIPTION`); CI tests and deploys against
+exactly those versions. To upgrade packages: update them locally, run
+the `renv::snapshot(...)` call quoted at the top of the workflow, and
+commit the lockfile diff.
 
 ## Data
 
