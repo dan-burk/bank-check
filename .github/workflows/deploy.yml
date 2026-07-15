@@ -3,15 +3,15 @@
 # server-side) and GitHub Pages (shinylive/webR backup) — are blocked
 # unless it passes. Pull requests run the test only.
 #
-# Package versions are pinned by renv.lock at the repo root (snapshot of
-# the direct dependencies declared in DESCRIPTION plus their closure).
-# The test and the shinyapps deploy restore from it, so the app is tested
-# and deployed against the same package set every time instead of
-# whatever CRAN shipped that day — the UI leans on version-sensitive
-# bslib behavior. To upgrade: update packages locally, re-run
-#   renv::snapshot(project = ".", lockfile = "renv.lock",
-#                  type = "explicit", prompt = FALSE, force = TRUE)
-# and commit the lockfile diff.
+# Reproducibility: every job installs R packages as prebuilt binaries
+# from the dated Posit Package Manager snapshot in PKG_REPO below, with
+# the runner image and R version pinned to match. Same date, same
+# binaries, forever — no source compilation in CI, and the versions the
+# smoke test validates are the versions that deploy (the UI leans on
+# version-sensitive bslib behavior, so "latest CRAN" is not safe).
+#
+# To upgrade packages: bump the snapshot date in PKG_REPO and in the
+# cache keys, push, and let the gate validate the new set.
 #
 # shinyapps.io needs three repo secrets (Settings > Secrets and variables
 # > Actions), copied from shinyapps.io Account > Tokens:
@@ -23,40 +23,45 @@ name: Test and deploy
 on:
   push:
     branches: [main]
-    paths: ["app/**", "renv.lock", ".github/workflows/deploy.yml"]
+    paths: ["app/**", "DESCRIPTION", ".github/workflows/deploy.yml"]
   pull_request:
-    paths: ["app/**", "renv.lock", ".github/workflows/deploy.yml"]
+    paths: ["app/**", "DESCRIPTION", ".github/workflows/deploy.yml"]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+env:
+  # Binary repo for the pinned runner distro (noble = ubuntu-24.04).
+  # __linux__ is a literal P3M path segment; it serves noble binaries to
+  # R's install.packages and falls back to source where none exists.
+  PKG_REPO: "https://packagemanager.posit.co/cran/__linux__/noble/2026-07-15"
+
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
       - uses: r-lib/actions/setup-r@v2
         with:
-          use-public-rspm: true
+          r-version: "4.5.1"
 
       - name: Cache R packages
         uses: actions/cache@v4
         with:
           path: ${{ env.R_LIBS_USER }}
-          key: rlib-${{ runner.os }}-${{ hashFiles('renv.lock') }}
+          key: rlib-test-noble-r451-snap20260715-${{ hashFiles('DESCRIPTION') }}
 
-      # repos = getOption("repos") points renv at the RSPM binary repo
-      # setup-r configured for this runner's distro (fast binary installs)
-      # instead of the source repo recorded in the lockfile
-      - name: Restore pinned packages
+      # The app's direct dependencies come from DESCRIPTION Imports (one
+      # list, no drift); install.packages pulls them plus dependencies
+      # from the dated snapshot
+      - name: Install pinned packages
         run: |
-          Rscript -e 'install.packages("renv")'
-          Rscript -e 'renv::restore(lockfile = "renv.lock",
-                                    library = .libPaths()[1],
-                                    repos = getOption("repos"),
-                                    prompt = FALSE)'
+          Rscript -e '
+            pkgs <- trimws(strsplit(read.dcf("DESCRIPTION")[, "Imports"], ",")[[1]])
+            install.packages(pkgs, repos = Sys.getenv("PKG_REPO"))
+          '
 
       # Runs offline: the shipped .rds copies in app/data/ satisfy every
       # fetch fallback, so FDIC API downtime cannot flake the gate
@@ -66,7 +71,7 @@ jobs:
   deploy-shinyapps:
     needs: test
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency:
       group: shinyapps
       cancel-in-progress: true
@@ -75,24 +80,23 @@ jobs:
 
       - uses: r-lib/actions/setup-r@v2
         with:
-          use-public-rspm: true
+          r-version: "4.5.1"
 
       - name: Cache R packages
         uses: actions/cache@v4
         with:
           path: ${{ env.R_LIBS_USER }}
-          key: rlib-${{ runner.os }}-${{ hashFiles('renv.lock') }}
+          key: rlib-deploy-noble-r451-snap20260715-${{ hashFiles('DESCRIPTION') }}
 
       # rsconnect records the versions installed here and shinyapps.io
-      # restores exactly those, so the pinned set is what serves prod.
-      # rsconnect itself is deploy tooling, installed unpinned.
-      - name: Restore pinned packages
+      # restores exactly those, so the snapshot-pinned set is what serves
+      # prod — the same set the test job just validated
+      - name: Install pinned packages
         run: |
-          Rscript -e 'install.packages(c("renv", "rsconnect"))'
-          Rscript -e 'renv::restore(lockfile = "renv.lock",
-                                    library = .libPaths()[1],
-                                    repos = getOption("repos"),
-                                    prompt = FALSE)'
+          Rscript -e '
+            pkgs <- trimws(strsplit(read.dcf("DESCRIPTION")[, "Imports"], ",")[[1]])
+            install.packages(c(pkgs, "rsconnect"), repos = Sys.getenv("PKG_REPO"))
+          '
 
       - name: Deploy
         env:
@@ -114,21 +118,21 @@ jobs:
   # GitHub Pages. Slow cold start but no server, no hour caps; it covers
   # visitors when the shinyapps.io deployment sleeps or hits its monthly
   # active-hours limit. Browser-side package versions come from the webR
-  # bundle inside the shinylive package, not renv.lock, so shinylive is
-  # installed unpinned here — the smoke-tested R code is what's exported.
+  # bundle inside the shinylive package (pinned by the same snapshot),
+  # not from DESCRIPTION — the smoke-tested R code is what's exported.
   build-pages:
     needs: test
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
       - uses: r-lib/actions/setup-r@v2
         with:
-          use-public-rspm: true
+          r-version: "4.5.1"
 
       - name: Install shinylive
-        run: Rscript -e 'install.packages("shinylive")'
+        run: Rscript -e 'install.packages("shinylive", repos = Sys.getenv("PKG_REPO"))'
 
       - name: Export app to static site
         run: Rscript -e 'shinylive::export("app", "_site", template_params = list(title = "Bank Check"))'
@@ -144,7 +148,7 @@ jobs:
 
   deploy-pages:
     needs: build-pages
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       pages: write
       id-token: write

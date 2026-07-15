@@ -3,11 +3,12 @@ Type: Project
 Title: Bank Check
 Version: 1.0.0
 Description: Dependency manifest for the Bank Check Shiny app. Not an R
-    package; this file declares the app's direct runtime dependencies so
-    renv can snapshot them (type = "explicit") into renv.lock, which CI
-    restores for testing and both deploys. Deploy-only tooling (shinylive,
-    rsconnect) is installed unpinned in the workflows and deliberately
-    left out of Imports.
+    package; Imports below is the app's direct runtime dependency list,
+    read by .github/workflows/deploy.yml, which installs it (plus
+    dependencies) as binaries from a dated Posit Package Manager snapshot
+    so tests and deploys see the same package versions every run.
+    Deploy-only tooling (shinylive, rsconnect) is installed in the
+    workflow from the same snapshot but deliberately left out of Imports.
 Imports:
     shiny,
     bslib,
