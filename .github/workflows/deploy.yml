@@ -55,10 +55,13 @@ jobs:
 
       # The app's direct dependencies come from DESCRIPTION Imports (one
       # list, no drift); install.packages pulls them plus dependencies
-      # from the dated snapshot
+      # from the dated snapshot. timeout/warn per idepGolem's
+      # install_packages.R: the 60s default flakes on large downloads,
+      # and warn = 1 surfaces failed installs where they happen.
       - name: Install pinned packages
         run: |
           Rscript -e '
+            options(timeout = 300, warn = 1)
             pkgs <- trimws(strsplit(read.dcf("DESCRIPTION")[, "Imports"], ",")[[1]])
             install.packages(pkgs, repos = Sys.getenv("PKG_REPO"))
           '
@@ -94,6 +97,7 @@ jobs:
       - name: Install pinned packages
         run: |
           Rscript -e '
+            options(timeout = 300, warn = 1)
             pkgs <- trimws(strsplit(read.dcf("DESCRIPTION")[, "Imports"], ",")[[1]])
             install.packages(c(pkgs, "rsconnect"), repos = Sys.getenv("PKG_REPO"))
           '
@@ -132,7 +136,7 @@ jobs:
           r-version: "4.5.1"
 
       - name: Install shinylive
-        run: Rscript -e 'install.packages("shinylive", repos = Sys.getenv("PKG_REPO"))'
+        run: Rscript -e 'options(timeout = 300, warn = 1); install.packages("shinylive", repos = Sys.getenv("PKG_REPO"))'
 
       - name: Export app to static site
         run: Rscript -e 'shinylive::export("app", "_site", template_params = list(title = "Bank Check"))'
