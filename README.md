@@ -39,6 +39,32 @@ the test validates are the versions that deploy. To upgrade packages,
 bump the snapshot date in the workflow and let the gate validate the
 new set.
 
+## Data integrity check
+
+The smoke test proves the charts *render*; the integrity test proves
+they show the *right numbers*. It samples 10 banks (3 small, 2 medium,
+3 large, 2 known-weird ones), recomputes every chart value straight
+from the raw FDIC columns with independent arithmetic, and cross-checks
+the y-values inside the built plotly traces. Real miscalculations fail
+the run; genuinely strange-but-real data (a trust bank with no loans,
+net recoveries) prints in a WEIRDNESS REPORT for human review.
+
+It runs locally only (no CI — phase 2 needs the live FDIC API, and the
+smoke test stays the sole deploy gate). From the repo root:
+
+```sh
+Rscript app/tests/integrity.R
+```
+
+Phase 1 runs offline against the shipped cross-section; phase 2 fetches
+each roster bank's history from the live FDIC API (cached in
+`app/data-cache/`, so reruns are fast) and self-skips politely when the
+API is unreachable. Two optional env vars:
+
+- `INTEGRITY_SEED` — every run prints its seed and roster; pass the same
+  seed to reproduce the exact roster (default `20260716`).
+- `INTEGRITY_SKIP_LIVE=1` — offline phase only, no API calls.
+
 ## Data
 
 - `app/data/` ships the startup data: the latest all-bank cross-section,
