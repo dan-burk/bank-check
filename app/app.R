@@ -14,7 +14,6 @@ library(dplyr)
 
 # helpers in app/R/ are auto-sourced by shiny (data.R, plots.R, theme.R)
 
-BASE <- load_base_banks()
 INSTITUTIONS <- fetch_institutions_cached()
 INST_CHOICES <- institution_choices(INSTITUTIONS)
 XS <- fetch_cross_section_cached()
@@ -100,12 +99,6 @@ line_swatch <- function(color, label) {
                            "border-top:2px dotted ", color, "; margin-right:5px;")),
        label)
 }
-
-# Preloaded live banks, keyed by CERT
-SEED_BANKS <- list(
-  "17437" = BASE |> filter(label == "Dacotah (SD)"),
-  "3973"  = BASE |> filter(label == "First B&T (SD)")
-)
 
 KPI_DEFS <- list(
   list(code = "ASSET",     title = "Total Assets"),
@@ -463,7 +456,11 @@ ui <- page_navbar(
 
 server <- function(input, output, session) {
 
-  loaded <- reactiveVal(SEED_BANKS)
+  # Empty, not seeded: Dacotah and First B&T used to be preloaded from the
+  # shipped panel_histories.rds, which nothing refreshes, so they alone
+  # rendered frozen at that file's last quarter while every other bank came
+  # back live. They now take the same fetch path as the other ~4,200.
+  loaded <- reactiveVal(list())
 
   # Both pickers search all active banks; either fetches on pick. No bank
   # preselected: every tab shows the sidebar prompt until one is picked.

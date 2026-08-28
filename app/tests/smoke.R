@@ -180,7 +180,9 @@ shiny::testServer(app = "app", {
     cat("ok output:", o, "\n")
   }
   stopifnot(length(sel_banks()) == 2)
-  stopifnot(!is.null(cmp()), cmp()$label[1] == "First B&T (SD)")
+  # Label comes from the live directory now, not a hand-written short name
+  # in a shipped file, so assert against what bank_label() actually yields
+  stopifnot(!is.null(cmp()), cmp()$label[1] == bank_label(3973, inst))
   cat("comparison bank active: yes\n")
 
   session$setInputs(prov_mode = "usd")
