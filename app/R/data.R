@@ -92,35 +92,75 @@ fail_median <- function(panel, code, min_n = 5) {
 # Live fetch of any CERT, cached as CSV so the FDIC API is hit once per
 # bank. In the browser the cache is webR's in-memory filesystem, so it
 # lasts one session; on desktop it persists in app/data-cache/.
-fetch_bank_cached <- function(cert) {
+fetch_bank_cached <- function(cert, max_age_days = 30) {
   cache <- file.path(CACHE_DIR, paste0("cert_", cert, ".rds"))
-  if (file.exists(cache)) {
-    return(derive(readRDS(cache)))
-  }
-  df <- fetch_bank_financials(cert = cert)
-  if (is.null(df)) return(NULL)
-  saveRDS(df, cache)
-  derive(df)
-}
-
-# Latest full cross-section (~4,350 banks), feeding the peer percentile
-# bands. A shipped copy in data/ (refreshed by sync_assets.R at each
-# deploy) makes first paint instant; the live fetch is the fallback.
-XS_RISDATE <- 20260331
-
-fetch_cross_section_cached <- function(max_age_days = 30) {
-  shipped <- file.path("data", paste0("xs_", XS_RISDATE, ".rds"))
-  if (file.exists(shipped)) {
-    return(derive(readRDS(shipped)))
-  }
-  cache <- file.path(CACHE_DIR, paste0("xs_", XS_RISDATE, ".rds"))
   if (file.exists(cache) &&
       difftime(Sys.time(), file.mtime(cache), units = "days") < max_age_days) {
     return(derive(readRDS(cache)))
   }
-  xs <- fetch_all_banks_quarter(XS_RISDATE)
-  saveRDS(xs, cache)
-  derive(xs)
+  df <- tryCatch(fetch_bank_financials(cert = cert),
+                 error = function(e) {
+                   message("FDIC fetch failed for CERT ", cert, ": ",
+                           conditionMessage(e))
+                   NULL
+                 })
+  if (is.null(df)) {
+    # Unreachable API or a withdrawn bank: a stale history beats no chart
+    if (file.exists(cache)) return(derive(readRDS(cache)))
+    return(NULL)
+  }
+  saveRDS(df, cache)
+  derive(df)
+}
+
+# Newest xs_<RISDATE>.rds in a directory, or NULL if there is none. The
+# filename carries the quarter, so the data and the label the UI prints for
+# it cannot drift apart -- there is no separate constant to forget to bump.
+newest_xs <- function(dir) {
+  f <- list.files(dir, pattern = "^xs_[0-9]{8}\\.rds$", full.names = TRUE)
+  if (length(f) == 0) return(NULL)
+  sort(f, decreasing = TRUE)[1]
+}
+
+# Latest full cross-section (~4,300 banks), feeding the peer percentile
+# bands. Live first, so a new FDIC quarter shows up on its own with no
+# redeploy: a session cache newer than max_age_days short-circuits the
+# fetch, and the shipped copy in data/ is the offline fallback for FDIC
+# downtime and for the CI smoke test, which must run without network.
+# Refresh the shipped copy with app/build/sync_assets.R.
+fetch_cross_section_cached <- function(max_age_days = 30) {
+  cache <- newest_xs(CACHE_DIR)
+  if (!is.null(cache) &&
+      difftime(Sys.time(), file.mtime(cache), units = "days") < max_age_days) {
+    return(derive(readRDS(cache)))
+  }
+  live <- tryCatch({
+    rd <- latest_risdate()
+    if (is.na(rd)) stop("no RISDATE returned")
+    xs <- fetch_all_banks_quarter(rd)
+    saveRDS(xs, file.path(CACHE_DIR, paste0("xs_", rd, ".rds")))
+    xs
+  }, error = function(e) {
+    message("Live cross-section unavailable (", conditionMessage(e),
+            "); falling back to the shipped copy.")
+    NULL
+  })
+  if (!is.null(live)) return(derive(live))
+  if (!is.null(cache)) return(derive(readRDS(cache)))  # stale beats nothing
+  shipped <- newest_xs("data")
+  if (is.null(shipped)) {
+    stop("No cross-section: no network and no shipped data/xs_*.rds")
+  }
+  derive(readRDS(shipped))
+}
+
+# Quarter label ("2026 Q2") for whichever cross-section actually loaded, so
+# a legend can never name a quarter the data behind it is not from.
+xs_quarter_label <- function(xs) {
+  d <- xs$date[!is.na(xs$date)]
+  if (length(d) == 0) return("latest quarter")
+  d <- max(d)
+  paste0(format(d, "%Y"), " Q", (as.integer(format(d, "%m")) - 1L) %/% 3L + 1L)
 }
 
 # Per-metric peer quantiles for every rate metric in fields_meta. Quantiles,
@@ -144,6 +184,11 @@ peer_stats <- function(xs, meta) {
 bank_label <- function(cert, inst, fallback_name = NULL) {
   r <- inst[inst$CERT == as.integer(cert), ]
   nm <- if (nrow(r) > 0) r$NAME[1] else fallback_name
+  # 85 banks in the financials cross-section are absent from the ACTIVE:1
+  # directory (clearing houses like DTC CERT 90544, trust-only charters).
+  # With no name from either source this fell through as character(0),
+  # which becomes a silently unnamed plotly trace rather than an error.
+  if (length(nm) == 0 || is.na(nm)) return(paste0("CERT ", cert))
   nm <- tools::toTitleCase(tolower(nm))
   if (nrow(r) > 0 && !is.na(r$CITY[1])) {
     paste0(nm, " (", tools::toTitleCase(tolower(r$CITY[1])), ", ",
@@ -151,22 +196,29 @@ bank_label <- function(cert, inst, fallback_name = NULL) {
   } else nm
 }
 
-# Directory of ALL active FDIC banks (~4,300) for the pickers. Shipped
-# copy first (refreshed at deploy), then the 30-day desktop cache, then a
-# live fetch (one request; all rows fit under the 10k cap).
+# Directory of ALL active FDIC banks (~4,300) for the pickers. Same
+# ordering as the cross-section: fresh cache, then live (one request; all
+# rows fit under the 10k cap), then the shipped copy. Live-first is what
+# lets new charters, mergers and failures reach the pickers on their own.
 fetch_institutions_cached <- function(max_age_days = 30) {
-  shipped <- file.path("data", "institutions.rds")
-  if (file.exists(shipped)) {
-    return(readRDS(shipped))
-  }
   cache <- file.path(CACHE_DIR, "institutions.rds")
   if (file.exists(cache) &&
       difftime(Sys.time(), file.mtime(cache), units = "days") < max_age_days) {
     return(readRDS(cache))
   }
-  df <- fetch_institutions()
-  saveRDS(df, cache)
-  df
+  df <- tryCatch(fetch_institutions(), error = function(e) {
+    message("Live institution directory unavailable (", conditionMessage(e),
+            "); falling back to the shipped copy.")
+    NULL
+  })
+  if (!is.null(df)) {
+    saveRDS(df, cache)
+    return(df)
+  }
+  if (file.exists(cache)) return(readRDS(cache))
+  shipped <- file.path("data", "institutions.rds")
+  if (!file.exists(shipped)) stop("No institution directory available")
+  readRDS(shipped)
 }
 
 # Named choice vector for the directory picker: label -> CERT

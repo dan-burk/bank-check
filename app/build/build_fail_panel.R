@@ -34,7 +34,8 @@ body <- fdic_query(FDIC_FAILURES_ENDPOINT, list(
   limit = 10000, offset = 0
 ))
 stopifnot(body$meta$total > 0, body$meta$total < 10000)
-fails <- bind_rows(lapply(body$data, function(x) flatten_record(x$data)))
+fails <- flatten_body(body)
+fails$FAILYR    <- as.integer(fails$FAILYR)   # used as a number below
 fails$fail_date <- as.Date(fails$FAILDATE, format = "%m/%d/%Y")
 fails <- arrange(fails, fail_date)
 cat("failures fetched:", nrow(fails), "\n")
@@ -82,7 +83,7 @@ fetch_chunk <- function(certs, failyr) {
   ))
   stopifnot(body$meta$total < 10000)
   if (body$meta$total == 0) return(NULL)
-  bind_rows(lapply(body$data, function(x) flatten_record(x$data)))
+  flatten_body(body)
 }
 
 hist_parts <- list()
