@@ -17,7 +17,13 @@ library(dplyr)
 BASE <- load_base_banks()
 INSTITUTIONS <- fetch_institutions_cached()
 INST_CHOICES <- institution_choices(INSTITUTIONS)
-PEER <- peer_stats(fetch_cross_section_cached(), FIELDS_META)
+XS <- fetch_cross_section_cached()
+PEER <- peer_stats(XS, FIELDS_META)
+# Legends name the quarter the peer data actually came from, never a
+# literal: the cross-section refreshes itself, so a hardcoded label goes
+# stale silently while every chart keeps citing it.
+XS_LABEL <- xs_quarter_label(XS)
+rm(XS)
 
 # All post-2000 failures (built by app/build/build_fail_panel.R)
 FAIL_PANEL <- load_fail_panel()
@@ -56,7 +62,8 @@ metric_footnote <- function(code) {
     }
     if (!is.null(peer_for(code))) {
       swatches[[length(swatches) + 1]] <-
-        line_swatch(COL_GRAY, "Median, all FDIC banks, 2026 Q1 (band: middle 50%)")
+        line_swatch(COL_GRAY, paste0("Median, all FDIC banks, ", XS_LABEL,
+                                     " (band: middle 50%)"))
     }
   }
 
@@ -644,7 +651,8 @@ server <- function(input, output, session) {
         div(class = "d-flex flex-wrap align-items-center mt-1",
             line_swatch(COL_WARN, "Watch level"),
             line_swatch(COL_CRIT, "Regulatory floor"),
-            line_swatch(COL_GRAY, "Median of all FDIC banks, 2026 Q1")))
+            line_swatch(COL_GRAY, paste0("Median of all FDIC banks, ",
+                                         XS_LABEL))))
   })
 
   # Scoped explorers, one per category page ----

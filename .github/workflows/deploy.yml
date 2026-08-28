@@ -66,8 +66,9 @@ jobs:
             install.packages(pkgs, repos = Sys.getenv("PKG_REPO"))
           '
 
-      # Runs offline: the shipped .rds copies in app/data/ satisfy every
-      # fetch fallback, so FDIC API downtime cannot flake the gate
+      # Fetches live where it can, but every fetch falls back to the
+      # shipped .rds copies in app/data/, so FDIC API downtime cannot
+      # flake the gate
       - name: Run smoke test
         run: Rscript app/tests/smoke.R
 

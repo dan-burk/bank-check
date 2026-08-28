@@ -160,7 +160,10 @@ usd_div <- function(vals) {
 # ---- roster: 3 small + 2 medium + 3 large + 2 weird ------------------------
 
 inst   <- fetch_institutions_cached()
-xs_raw <- readRDS(file.path("data", paste0("xs_", XS_RISDATE, ".rds")))
+xs_path <- newest_xs("data")
+stopifnot(!is.null(xs_path))
+XS_RISDATE <- as.integer(sub("^.*xs_([0-9]{8})\\.rds$", "\\1", xs_path))
+xs_raw <- readRDS(xs_path)
 xs_raw$CERT <- as.integer(xs_raw$CERT)
 
 # Weird #1 is pinned; #2 is screened deterministically (no seed): the

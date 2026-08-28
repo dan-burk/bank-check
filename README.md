@@ -67,11 +67,29 @@ API is unreachable. Two optional env vars:
 
 ## Data
 
-- `app/data/` ships the startup data: the latest all-bank cross-section,
-  the institution directory, and pre-failure histories for every post-2000
-  failure (rebuildable with `app/build/build_fail_panel.R`).
-- Picking a bank fetches its full quarterly history live from
-  `api.fdic.gov` (CORS-open, no auth) and caches it for the session.
+Everything comes from `api.fdic.gov` (CORS-open, no auth) at runtime. The
+app is not pinned to a quarter: it discovers the newest sufficiently
+complete one itself, so a new FDIC filing period shows up with no code
+change and no redeploy.
+
+- **Live, per session** — the all-bank cross-section behind the peer
+  percentile bands, the institution directory behind the pickers, and a
+  bank's full quarterly history when you pick it. Each is cached for 30
+  days in `app/data-cache/` (in the browser build that cache is webR's
+  in-memory filesystem, so it lasts one session).
+- **Which quarter** — the newest quarter is accepted only once at least
+  95% as many banks have filed as in the quarter before it. Quarters open
+  on the API as a trickle of early filers, and a half-filled cross-section
+  would make every peer median quietly wrong rather than obviously absent.
+- **Offline fallback** — `app/data/` ships a snapshot of the cross-section
+  and the directory, used only when the API is unreachable, and by the CI
+  smoke test so the deploy gate needs no network. Refresh it occasionally
+  with `Rscript.exe app/build/sync_assets.R` and commit what changes.
+- **Not live** — pre-failure histories for all post-2000 failures ship in
+  `app/data/` and refresh only when you run
+  `app/build/build_fail_panel.R`. Failures are rare (6 across 2025-2026),
+  so re-fetching 581 banks' histories at every startup would not earn its
+  cost; rerun the builder after a failure you care about.
 - All dollar fields are $thousands, per FDIC convention.
 
 Not affiliated with the FDIC. Informational only, not financial advice.
