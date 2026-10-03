@@ -176,6 +176,25 @@ ui <- page_navbar(
   # default, showed it). Pages flow and scroll like documents everywhere.
   fillable = FALSE,
   header = tagList(
+    # Google Analytics, shared with danielburkhalter.dev and the other apps.
+    # Only the live hosts report, so local runs stay out of the numbers.
+    # The path is fixed because both shinyapps.io and shinylive run the
+    # app inside an iframe with a generated URL.
+    tags$head(
+      tags$script(async = NA,
+                  src = "https://www.googletagmanager.com/gtag/js?id=G-3HK7FW9Y6N"),
+      tags$script(HTML("
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        if (['danielburkhalter.dev', 'danielburkhalter.shinyapps.io']
+              .includes(location.hostname)) {
+          gtag('js', new Date());
+          gtag('config', 'G-3HK7FW9Y6N', {
+            page_location: location.origin + '/bank-check/'
+          });
+        }
+      "))
+    ),
     # Dictionary styling: commonmark emits bare <table> tags that Bootstrap
     # 5 leaves unstyled; the gsub in output$dict_full adds .table classes
     # and this block handles sizing and heading rhythm.
