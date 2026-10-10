@@ -23,9 +23,9 @@ name: Test and deploy
 on:
   push:
     branches: [main]
-    paths: ["app/**", "DESCRIPTION", ".github/workflows/deploy.yml"]
+    paths: ["app/**", "pages/**", "DESCRIPTION", ".github/workflows/deploy.yml"]
   pull_request:
-    paths: ["app/**", "DESCRIPTION", ".github/workflows/deploy.yml"]
+    paths: ["app/**", "pages/**", "DESCRIPTION", ".github/workflows/deploy.yml"]
   workflow_dispatch:
 
 permissions:
@@ -141,6 +141,18 @@ jobs:
 
       - name: Export app to static site
         run: Rscript -e 'shinylive::export("app", "_site", template_params = list(title = "Bank Check"))'
+
+      # Swap shinylive's bare spinner for the branded loading page (progress
+      # bar, step messages, jokes); see pages/loading.html
+      - name: Add loading screen
+        run: |
+          Rscript -e '
+            index <- readLines("_site/index.html")
+            body_end <- grep("</body>", index, fixed = TRUE)
+            stopifnot(length(body_end) == 1)
+            index <- append(index, readLines("pages/loading.html"), after = body_end - 1)
+            writeLines(index, "_site/index.html")
+          '
 
       - name: Disable Jekyll, add favicon
         run: |

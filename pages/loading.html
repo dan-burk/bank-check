@@ -1,0 +1,108 @@
+<!-- Loading screen for the GitHub Pages (shinylive) build, adapted from
+     RTutor's. The deploy workflow injects this before </body> of
+     _site/index.html. It lives outside app/ because shinylive ships every
+     file in the app folder to the browser.
+     webR reports no real progress, so the bar moves on a timer and slows as
+     it nears 95%. The overlay stays up until Shiny has connected inside the
+     app iframe AND the app's own #boot_overlay (app.R) has removed itself,
+     i.e. the first charts have drawn, so the hand-off shows no blank page. -->
+<style>
+  #bc-loading {
+    position: fixed; inset: 0; z-index: 9999; background: #F7F9FB;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding: 0 16px; text-align: center; transition: opacity 0.6s;
+  }
+  #bc-loading img { width: 64px; height: 64px; margin-bottom: 10px; }
+  #bc-loading h1 { font-size: 28px; color: #1F2933; margin: 0 0 24px; font-weight: 600; }
+  #bc-bar { width: min(420px, 100%); height: 10px; background: #DEE2E6; border-radius: 5px; overflow: hidden; }
+  #bc-bar-fill { height: 100%; width: 2%; background: #2C5F8A; border-radius: 5px; transition: width 1s ease; }
+  #bc-msg { margin-top: 14px; font-size: 17px; color: #1F2933; min-height: 1.4em; }
+  #bc-joke { margin-top: 22px; font-size: 15px; color: #666; font-style: italic;
+             max-width: 26rem; min-height: 3em; transition: opacity 0.4s; }
+  #bc-note { margin-top: 18px; font-size: 14px; color: #666; max-width: 30rem; }
+  #bc-note a { color: #2C5F8A; }
+</style>
+<div id="bc-loading">
+  <img src="favicon.ico" alt="">
+  <h1>Bank Check</h1>
+  <div id="bc-bar"><div id="bc-bar-fill"></div></div>
+  <div id="bc-msg">Starting up...</div>
+  <div id="bc-joke"></div>
+  <div id="bc-note">Bank Check runs entirely in your browser. The first visit
+    takes about a minute; later visits are faster.</div>
+</div>
+<script>
+  (function () {
+    var steps = [
+      "Starting R in your browser...",
+      "Downloading the R engine...",
+      "Loading Shiny...",
+      "Loading dplyr...",
+      "Loading plotly for charts...",
+      "Loading the FDIC bank directory...",
+      "Loading this quarter's numbers for every bank...",
+      "Computing peer ranges...",
+      "Loading bank failures since 2000...",
+      "Building the interface...",
+      "Drawing the first charts...",
+      "Almost ready..."
+    ];
+    // Same jokes as the in-app fetch overlay (app/app.R)
+    var jokes = [
+      "Why did the banker quit? She lost interest.",
+      "I asked the bank to check my balance. They pushed me over.",
+      "Why are piggy banks so wise? Full of common cents.",
+      "Old bankers never die. They just lose their balance.",
+      "My bank flagged suspicious activity. Apparently saving was out of character.",
+      "The safest place for cash is a snow bank. Frozen assets.",
+      "Where do fish keep their money? In the river bank.",
+      "The loan officer married the teller. Now it is a joint account.",
+      "Quarterly filings since 1984. Good things come to those who wait.",
+      "Dad, are we rich? No son, we are FDIC insured."
+    ];
+    var fill = document.getElementById("bc-bar-fill");
+    var msg = document.getElementById("bc-msg");
+    var jokeEl = document.getElementById("bc-joke");
+    var i = 0, pct = 2, ticks = 0;
+    var j = Math.floor(Math.random() * jokes.length);
+    jokeEl.textContent = jokes[j];
+    var timer = setInterval(function () {
+      ticks++;
+      pct += (95 - pct) * 0.1;
+      fill.style.width = pct + "%";
+      if (i < steps.length) msg.textContent = steps[i++];
+      if (ticks % 2 === 0) {
+        jokeEl.style.opacity = "0";
+        setTimeout(function () {
+          j = (j + 1) % jokes.length;
+          jokeEl.textContent = jokes[j];
+          jokeEl.style.opacity = "1";
+        }, 400);
+      }
+      // Stuck (old browser, blocked service worker, flaky network):
+      // point at the server-side deployment instead of spinning forever
+      if (ticks === 40) {
+        document.getElementById("bc-note").innerHTML =
+          "This is taking longer than usual. You can also try the " +
+          '<a href="https://danielburkhalter.shinyapps.io/bank-check/">server version</a>.';
+      }
+    }, 3000);
+    var check = setInterval(function () {
+      var f = document.querySelector("iframe");
+      var w = f && f.contentWindow;
+      var ready = false;
+      try {
+        ready = !!(w && w.Shiny && w.Shiny.shinyapp && w.Shiny.shinyapp.isConnected() &&
+                   !w.document.getElementById("boot_overlay"));
+      } catch (e) {}
+      if (!ready) return;
+      clearInterval(timer); clearInterval(check);
+      fill.style.width = "100%";
+      msg.textContent = "Ready!";
+      var o = document.getElementById("bc-loading");
+      setTimeout(function () { o.style.opacity = "0"; }, 400);
+      setTimeout(function () { o.remove(); }, 1100);
+    }, 500);
+  })();
+</script>

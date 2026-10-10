@@ -277,6 +277,55 @@ ui <- page_navbar(
           }
         });
       })();
+    ")),
+    # Boot overlay: covers the half-built page from first paint until the
+    # server's first flush finishes (first shiny:idle), so visitors see a
+    # branded screen instead of empty cards while the charts render. On
+    # shinylive it sits under the outer loading page (pages/loading.html),
+    # which waits for this element to be removed before fading out, so the
+    # hand-off is seamless. The 60s fallback keeps a stalled or errored
+    # session from hiding the app forever.
+    tags$style(HTML("
+      #boot_overlay { position: fixed; inset: 0; z-index: 3000;
+                      display: flex; flex-direction: column;
+                      align-items: center; justify-content: center;
+                      background: #F7F9FB; padding: 0 16px;
+                      text-align: center; transition: opacity 0.5s; }
+      #boot_overlay img { width: 64px; height: 64px; margin-bottom: 10px; }
+      #boot_overlay h1 { font-size: 28px; color: #1F2933; font-weight: 600;
+                         margin: 0 0 24px; }
+      #boot_overlay .bar { width: min(420px, 100%); height: 10px;
+                           background: #DEE2E6; border-radius: 5px;
+                           overflow: hidden; position: relative; }
+      #boot_overlay .bar::after { content: ''; position: absolute; top: 0;
+                                  bottom: 0; width: 35%; background: #2C5F8A;
+                                  border-radius: 5px;
+                                  animation: bootslide 1.4s ease-in-out
+                                             infinite; }
+      #boot_overlay .msg { margin-top: 14px; font-size: 17px;
+                           color: #1F2933; }
+      @keyframes bootslide { from { left: -35%; } to { left: 100%; } }
+    ")),
+    div(id = "boot_overlay",
+        tags$img(src = "logo.png", alt = ""),
+        tags$h1("Bank Check"),
+        div(class = "bar"),
+        div(class = "msg", "Drawing the latest FDIC numbers...")),
+    tags$script(HTML("
+      (function() {
+        var done = false;
+        function hide() {
+          if (done) return;
+          done = true;
+          var el = document.getElementById('boot_overlay');
+          if (!el) return;
+          el.style.opacity = '0';
+          setTimeout(function() { el.remove(); }, 500);
+        }
+        // Short delay: plotly draws client-side just after the values land
+        $(document).one('shiny:idle', function() { setTimeout(hide, 300); });
+        setTimeout(hide, 60000);
+      })();
     "))
   ),
   sidebar = sidebar(
