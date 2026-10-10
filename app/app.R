@@ -181,6 +181,10 @@ ui <- page_navbar(
     # The path is fixed because both shinyapps.io and shinylive run the
     # app inside an iframe with a generated URL.
     tags$head(
+      # Tab icon. Explicit because browsers otherwise ask for /favicon.ico
+      # at the domain root, which 404s on shinyapps.io. Relative, so it
+      # resolves through shinyapps.io's worker <base href> to app/www/.
+      tags$link(rel = "icon", type = "image/png", href = "logo.png"),
       tags$script(async = NA,
                   src = "https://www.googletagmanager.com/gtag/js?id=G-3HK7FW9Y6N"),
       tags$script(HTML("

@@ -143,11 +143,18 @@ jobs:
         run: Rscript -e 'shinylive::export("app", "_site", template_params = list(title = "Bank Check"))'
 
       # Swap shinylive's bare spinner for the branded loading page (progress
-      # bar, step messages, jokes); see pages/loading.html
-      - name: Add loading screen
+      # bar, step messages, jokes); see pages/loading.html. Also point the
+      # tab icon at favicon.ico (copied below): browsers otherwise ask for
+      # /favicon.ico at the domain root, which is the personal site, not here.
+      - name: Add loading screen and tab icon
         run: |
           Rscript -e '
             index <- readLines("_site/index.html")
+            title <- grep("</title>", index, fixed = TRUE)
+            stopifnot(length(title) == 1)
+            index[title] <- sub("</title>",
+              "</title><link rel=\"icon\" type=\"image/png\" href=\"favicon.ico\">",
+              index[title], fixed = TRUE)
             body_end <- grep("</body>", index, fixed = TRUE)
             stopifnot(length(body_end) == 1)
             index <- append(index, readLines("pages/loading.html"), after = body_end - 1)
