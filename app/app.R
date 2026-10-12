@@ -209,6 +209,20 @@ ui <- page_navbar(
                     border-bottom: 1px solid #DEE2E6; padding-bottom: 0.3rem; }
       .dict-md table { font-size: 0.92rem; }
       #dict_table { font-size: 0.95rem; }
+      /* Overview KPI boxes: bslib's value_box defaults (big padding, tall
+         min-height, 2rem value) dwarf a label, a number and a trend */
+      .bslib-value-box.kpi-compact { min-height: 0 !important; }
+      .kpi-compact > .card-body { padding: 0 !important; }
+      .kpi-compact .value-box-area { padding: .5rem .75rem !important;
+                                     gap: 0 !important; }
+      .kpi-compact .value-box-title { font-size: .78rem; color: #5B6670;
+                                      margin-bottom: 0 !important;
+                                      white-space: nowrap; overflow: hidden;
+                                      text-overflow: ellipsis; }
+      .kpi-compact .value-box-value { font-size: 1.25rem; font-weight: 600;
+                                      line-height: 1.3;
+                                      margin-bottom: 0 !important; }
+      .kpi-compact .kpi-delta { font-size: .75rem; }
       /* Assets column is searchable=FALSE (rank-only); DT still draws a
          disabled 'All' box there, which begs a click that does nothing */
       #dir_table thead td:nth-child(4) input { display: none; }
@@ -358,13 +372,7 @@ ui <- page_navbar(
   nav_panel(
     "Overview",
     uiOutput("kpis"),
-    card(
-      chip_header("Every FDIC Bank by Size", "Size"),
-      plotlyOutput("scale_plot", height = "250px")#,
-      # card_footer(class = "text-muted small",paste0(""))
-    ),
-    uiOutput("camels_grid"),
-    uiOutput("overview_legend")
+    uiOutput("overview_grid")
   ),
 
   nav_panel("Capital", ui_explorer("cap", EXPLORERS$cap$groups, EXPLORERS$cap$default)),
@@ -651,19 +659,26 @@ server <- function(input, output, session) {
       good  <- KPI_GOOD_UP[[k$code]]
       trend <- if (is.na(delta)) "" else {
         arrow <- if (delta >= 0) "▲" else "▼"
-        paste0(arrow, " ", fmt_value(abs(delta), meta_row$units[1]), " vs 1y ago")
+        paste0(arrow, " ", fmt_value(abs(delta), meta_row$units[1]))
       }
       trend_color <- if (is.na(delta)) "#666" else
         if ((delta >= 0) == good) "#1B7837" else "#C0392B"
       value_box(
+        class = "kpi-compact",
         title = k$title,
         value = fmt_value(val, meta_row$units[1]),
-        p(style = paste0("color:", trend_color, "; font-size: 0.85rem;"), trend),
+        span(class = "kpi-delta", style = paste0("color:", trend_color), trend),
         theme = value_box_theme(bg = "#F4F7FA", fg = "#1F2933")
       )
     })
-    do.call(layout_columns,
-            c(list(col_widths = breakpoints(xs = 6, lg = 2)), boxes))
+    # One caption carries "vs 1y ago" instead of repeating it in every box
+    tagList(
+      div(class = "text-muted small mb-1",
+          "Latest quarter · change vs 1 year ago"),
+      do.call(layout_columns,
+              c(list(col_widths = breakpoints(xs = 6, lg = 2), gap = "0.6rem"),
+                boxes))
+    )
   })
 
   # Scale strip: selected banks against all ~4,300 by total assets ----
@@ -678,8 +693,11 @@ server <- function(input, output, session) {
     scale_strip(INSTITUTIONS, sel)
   })
 
-  # CAMELS small-multiples grid, comparison banks included ----
-  output$camels_grid <- renderUI({
+  # Size chart + CAMELS small multiples, comparison banks included ----
+  # The size strip doesn't need full width, so it takes two-thirds of the
+  # first row beside tile 1; the legend fills the slot after tile 6 so the
+  # last row of three isn't left with a gap.
+  output$overview_grid <- renderUI({
     df <- cur()
     n <- nrow(df)
     tiles <- lapply(seq_along(CAMELS_TILES), function(i) {
@@ -694,8 +712,21 @@ server <- function(input, output, session) {
         plotlyOutput(paste0("tile_", i), height = "200px")
       )
     })
-    do.call(layout_columns,
-            c(list(col_widths = breakpoints(xs = 12, sm = 6, xl = 4)), tiles))
+    size_card <- card(
+      chip_header("Every FDIC Bank by Size", "Size"),
+      plotlyOutput("scale_plot", height = "200px")
+    )
+    legend_card <- card(
+      card_header(class = "py-1 small", "Reading the charts"),
+      uiOutput("overview_legend")
+    )
+    tagList(
+      layout_columns(col_widths = breakpoints(xs = 12, lg = c(8, 4)),
+                     size_card, tiles[[1]]),
+      do.call(layout_columns,
+              c(list(col_widths = breakpoints(xs = 12, sm = 6, xl = 4)),
+                tiles[-1], list(legend_card)))
+    )
   })
   for (i in seq_along(CAMELS_TILES)) local({
     ii <- i
@@ -705,23 +736,22 @@ server <- function(input, output, session) {
     })
   })
 
-  # One legend for the whole overview page, at the bottom ----
+  # One legend for the whole overview page, in the grid's last slot ----
+  # Stacked one item per line to fit a one-third-width card
   output$overview_legend <- renderUI({
     cols <- sel_cols()
     dots <- lapply(names(cols), function(lb) {
-      span(class = "me-3 text-nowrap",
-           span(style = paste0("display:inline-block; width:10px; height:10px;",
-                               "border-radius:5px; background:", cols[[lb]],
-                               "; margin-right:5px;")),
-           lb)
+      div(span(style = paste0("display:inline-block; width:10px; height:10px;",
+                              "border-radius:5px; background:", cols[[lb]],
+                              "; margin-right:5px;")),
+          lb)
     })
-    div(class = "text-muted small mt-1 mb-3 px-2",
-        div(dots),
-        div(class = "d-flex flex-wrap align-items-center mt-1",
-            line_swatch(COL_WARN, "Watch level"),
-            line_swatch(COL_CRIT, "Regulatory floor"),
-            line_swatch(COL_GRAY, paste0("Median of all FDIC banks, ",
-                                         XS_LABEL))))
+    div(class = "text-muted small d-flex flex-column gap-1",
+        dots,
+        line_swatch(COL_WARN, "Watch level"),
+        line_swatch(COL_CRIT, "Regulatory floor"),
+        line_swatch(COL_GRAY, paste0("Median of all FDIC banks, ",
+                                     XS_LABEL)))
   })
 
   # Scoped explorers, one per category page ----

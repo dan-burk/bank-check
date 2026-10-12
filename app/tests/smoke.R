@@ -167,7 +167,7 @@ shiny::testServer(app = "app", {
     cap_metric = "RBC1AAJ", aq_metric = "NCLNLSR",
     earn_metric = "ROA", liq_metric = "LNLSDEPR"
   )
-  outs <- c("kpis", "scale_plot", "camels_grid", "overview_legend",
+  outs <- c("kpis", "scale_plot", "overview_grid", "overview_legend",
             paste0("tile_", 1:6),
             "cap_plot", "cap_caveat", "cap_chip",
             "aq_plot", "earn_plot", "liq_plot",
