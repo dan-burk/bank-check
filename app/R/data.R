@@ -19,6 +19,13 @@ FIELDS_META <- utils::read.csv("data/fields_meta.csv",
 
 # Derived columns shared by every bank data frame ----
 derive <- function(df) {
+  # Quarterly charge-offs and provision come straight from FDIC (NTLNLSQ,
+  # ELNATQ). Differencing the year-to-date fields is only a fallback for
+  # data cached or shipped before those were fetched: it goes wrong in
+  # quarters where a bank restated its YTD figures or filed semiannually
+  # (1985), e.g. JPMorgan 1996 Q3 came out $58M against a reported $30M.
+  if (!"NTLNLSQ" %in% names(df)) df <- ytd_to_quarterly(df, "NTLNLS", "NTLNLSQ")
+  if (!"ELNATQ" %in% names(df)) df <- ytd_to_quarterly(df, "ELNATR", "ELNATQ")
   df |>
     dplyr::arrange(RISDATE) |>
     dplyr::mutate(
@@ -44,6 +51,20 @@ derive <- function(df) {
       core_pct_dep = ifelse(DEP > 0, 100 * COREDEP / DEP, NA),
       unrl_pct_eq = 100 * ((SCAF - SCAA) + (SCHF - SCHA)) / EQ
     )
+}
+
+# Fallback only (see derive): quarterly flow from a year-to-date field by
+# differencing within each bank and year; a year's first filing is the YTD
+# value itself
+ytd_to_quarterly <- function(df, ytd_col, out_col) {
+  df |>
+    dplyr::arrange(RISDATE) |>
+    dplyr::group_by(dplyr::across(dplyr::any_of("CERT")),
+                    yr = substr(as.character(RISDATE), 1, 4)) |>
+    dplyr::mutate("{out_col}" := .data[[ytd_col]] -
+                    dplyr::lag(.data[[ytd_col]], default = 0)) |>
+    dplyr::ungroup() |>
+    dplyr::select(-yr)
 }
 
 # All ~570 post-2000 failures: pre-failure quarterly histories (0-20

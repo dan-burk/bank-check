@@ -319,16 +319,6 @@ loan_mix <- function(df, mode = "pct", from_date = as.Date("2010-01-01")) {
   base_layout(p, if (mode == "pct") "% of gross loans" else sc$word)
 }
 
-# Call reports give income-statement items year-to-date; differencing within
-# each year recovers the quarterly flow (Q1 is the YTD value itself)
-ytd_to_quarterly <- function(df, ytd_col, out_col) {
-  df |>
-    dplyr::group_by(yr = format(date, "%Y")) |>
-    dplyr::mutate("{out_col}" := .data[[ytd_col]] -
-                    dplyr::lag(.data[[ytd_col]], default = 0)) |>
-    dplyr::ungroup()
-}
-
 # Risk vs cushion: allowance, noncurrent, and quarterly charge-offs on ONE
 # axis, in $ or as % of gross loans. The divergence between red and blue is
 # the story; the $ view shows how a growing book turns flat rates into
@@ -340,13 +330,11 @@ risk_cushion <- function(df, mode = "pct", df2 = NULL,
                          from_date = as.Date("2019-01-01")) {
   banks <- if (is.null(df2)) list(df) else list(df, df2)
   bar_cols <- c("#D9B8B3", "#C3CBD4")
-  dds <- lapply(banks, function(b) {
-    ytd_to_quarterly(b, "NTLNLS", "nco_q") |> dplyr::filter(date >= from_date)
-  })
+  dds <- lapply(banks, function(b) dplyr::filter(b, date >= from_date))
   # Dollar unit pooled across BOTH banks: one axis, one unit
   sc <- if (mode == "usd") {
     usd_axis_unit(unlist(lapply(dds, function(d) {
-      c(d$LNATRES, d$NCLNLS, d$nco_q)
+      c(d$LNATRES, d$NCLNLS, d$NTLNLSQ)
     })))
   } else NULL
   y_title <- if (mode == "usd") sc$word else "% of gross loans"
@@ -355,11 +343,11 @@ risk_cushion <- function(df, mode = "pct", df2 = NULL,
     dd <- dds[[i]]
     if (mode == "usd") {
       alw <- dd$LNATRES / sc$div; nc <- dd$NCLNLS / sc$div
-      nco <- dd$nco_q / sc$div
+      nco <- dd$NTLNLSQ / sc$div
       hv <- function(pre) paste0(pre, ": $%{y}", sc$letter)
     } else {
       alw <- dd$LNATRESR; nc <- dd$NCLNLSR
-      nco <- 100 * dd$nco_q / dd$gross_lns
+      nco <- 100 * dd$NTLNLSQ / dd$gross_lns
       hv <- function(pre) paste0(pre, ": %{y}%")
     }
     tag <- if (length(banks) > 1) paste0(" - ", banks[[i]]$label[1]) else ""
@@ -445,22 +433,19 @@ pipeline_lines <- function(df, df2 = NULL, from_date = as.Date("2019-01-01")) {
   base_layout(p, "% of gross loans")
 }
 
-# Quarterly provision vs charge-offs (YTD fields differenced in-year), as
+# Quarterly provision vs charge-offs (FDIC's quarterly fields), as
 # dollars or as % of gross loans. Same denominator for both series so the
 # bars stay comparable; matches the pct convention of the sibling charts.
 prov_nco_bars <- function(df, mode = "usd", from = 20220101) {
-  dd <- df |>
-    dplyr::filter(RISDATE >= from) |>
-    ytd_to_quarterly("ELNATR", "prov_q") |>
-    ytd_to_quarterly("NTLNLS", "nco_q")
+  dd <- dplyr::filter(df, RISDATE >= from)
   if (mode == "pct") {
-    prov <- round(100 * dd$prov_q / dd$gross_lns, 3)
-    nco  <- round(100 * dd$nco_q / dd$gross_lns, 3)
+    prov <- round(100 * dd$ELNATQ / dd$gross_lns, 3)
+    nco  <- round(100 * dd$NTLNLSQ / dd$gross_lns, 3)
     y_title <- "Quarterly flow (% of gross loans)"; hv <- "%{y}%"
   } else {
-    sc <- usd_axis_unit(c(dd$prov_q, dd$nco_q))
-    prov <- round(dd$prov_q / sc$div, 2)
-    nco  <- round(dd$nco_q / sc$div, 2)
+    sc <- usd_axis_unit(c(dd$ELNATQ, dd$NTLNLSQ))
+    prov <- round(dd$ELNATQ / sc$div, 2)
+    nco  <- round(dd$NTLNLSQ / sc$div, 2)
     y_title <- paste0("Quarterly flow (", sc$unit, ")")
     hv <- paste0("$%{y}", sc$letter)
   }

@@ -144,9 +144,11 @@ scan_traces <- function(traces, tag, cert) {
 }
 
 # Independent in-year differencing of a YTD flow field. Base-R on purpose:
-# shares no code with ytd_to_quarterly/prov_nco_bars (dplyr lag), so a bug there
+# shares no code with the app's ytd_to_quarterly (dplyr lag), so a bug there
 # cannot hide here. First filing of a calendar year = the YTD value as-is,
-# matching the app's lag(default = 0) semantics.
+# matching the app's lag(default = 0) semantics. Only the fallback for data
+# without FDIC's quarterly fields, and the yardstick for the report of
+# quarters where differencing disagrees with them.
 qflow <- function(risdate, ytd) {
   yr <- as.numeric(risdate) %/% 10000
   out <- ytd
@@ -155,6 +157,12 @@ qflow <- function(risdate, ytd) {
     if (length(i) > 1) out[i[-1]] <- ytd[i[-1]] - ytd[i[-length(i)]]
   }
   out
+}
+
+# Quarterly flow as FDIC reports it (NTLNLSQ, ELNATQ), or differenced YTD
+# when the data predates those fields
+raw_flow <- function(raw, q_col, ytd_col) {
+  if (is.null(raw[[q_col]])) qflow(raw$RISDATE, raw[[ytd_col]]) else raw[[q_col]]
 }
 
 # Mirror of usd_axis_unit's divisor decision, written independently
@@ -456,9 +464,8 @@ if (!run_live) {
                    rdate[w10], round(comp[[nm]] / div, 2))
     }
 
-    # Risk vs cushion: NTLNLS differenced on the FULL history, then
-    # windowed to >= 2019 (the builder's order), 2dp
-    nco_full <- qflow(raw$RISDATE, raw$NTLNLS)
+    # Risk vs cushion: FDIC's quarterly charge-offs, >= 2019, 2dp
+    nco_full <- raw_flow(raw, "NTLNLSQ", "NTLNLS")
     w19 <- rdate >= as.Date("2019-01-01")
     nco19 <- nco_full[w19]; gross19 <- gross_full[w19]
     rc_pct <- build("risk_cushion pct", risk_cushion(dfd))
@@ -477,11 +484,11 @@ if (!run_live) {
     expect_trace(tag("risk_cushion usd Noncurrent"), rc_usd$bt, "Noncurrent",
                  rdate[w19], round(raw$NCLNLS[w19] / div, 2))
 
-    # Provision vs charge-offs: window FIRST (>= 20220101), then difference
-    # (the builder's order), 3dp pct / 2dp usd
+    # Provision vs charge-offs: FDIC's quarterly fields, >= 20220101,
+    # 3dp pct / 2dp usd
     w22 <- as.numeric(raw$RISDATE) >= 20220101
-    prov22 <- qflow(raw$RISDATE[w22], raw$ELNATR[w22])
-    nco22  <- qflow(raw$RISDATE[w22], raw$NTLNLS[w22])
+    prov22 <- raw_flow(raw, "ELNATQ", "ELNATR")[w22]
+    nco22  <- nco_full[w22]
     gross22 <- gross_full[w22]
     # The bars are keyed by quarter label, recomputed here from RISDATE
     rd22 <- as.character(raw$RISDATE[w22])
@@ -528,14 +535,17 @@ if (!run_live) {
     expect_trace(tag("metric_ts NCLNLSR"), mt3$bt, lbl, rdate,
                  round(raw$NCLNLSR, 2))
 
-    # qflow self-consistency: quarters of a 4-filing year telescope back to
-    # the Q4 YTD, and a year's first filing passes through as-is
-    yr <- as.numeric(raw$RISDATE) %/% 10000
-    for (y in unique(yr)) {
-      i <- which(yr == y)
-      stopifnot(isTRUE(all.equal(nco_full[i[1]], raw$NTLNLS[i[1]])))
-      if (length(i) == 4 && all(is.finite(raw$NTLNLS[i]))) {
-        stopifnot(abs(sum(nco_full[i]) - raw$NTLNLS[i[4]]) < 1e-6)
+    # Quarters where differencing the YTD field would have drawn a different
+    # bar than FDIC's own quarterly figure (restatements, 1985's semiannual
+    # filings). Review, not failure: the charts use the quarterly field.
+    for (f in list(c("NTLNLSQ", "NTLNLS", "charge-offs"),
+                   c("ELNATQ", "ELNATR", "provision"))) {
+      if (is.null(raw[[f[1]]])) next
+      gap <- abs(qflow(raw$RISDATE, raw[[f[2]]]) - raw[[f[1]]])
+      n_gap <- sum(is.finite(gap) & gap > 0.5)
+      if (n_gap > 0) {
+        weird(cert, sprintf("%s: YTD differencing disagrees with FDIC %s in %d quarter(s); %s used",
+                            f[3], f[1], n_gap, f[1]))
       }
     }
 

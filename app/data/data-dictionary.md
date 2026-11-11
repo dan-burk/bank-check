@@ -42,12 +42,14 @@ The delinquency pipeline, in order: current -> 30-89 days late (P3LNLS) -> 90+ d
 | NALNLS | Nonaccrual loans | $K | Interest recognition stopped. The bulk of NCLNLS at most banks. |
 | P3ASSET | 30-89 days past due assets | $K | Asset-denominated twin of P3LNLS (includes debt securities); use the LNLS versions for loan-quality work. |
 | P9ASSET | 90+ days past due assets | $K | |
-| NTLNLS | Net charge-offs, YTD | $K | Realized losses. YTD; difference to get quarters. |
+| NTLNLS | Net charge-offs, YTD | $K | Realized losses. YTD. For quarters use NTLNLSQ, not a YTD difference. |
+| NTLNLSQ | Net charge-offs, quarter | $K | FDIC's own quarterly figure; what the charts plot. Differencing NTLNLS gets some quarters wrong (restatements, 1985's semiannual filings; JPMorgan 1996 Q3: $58M differenced vs $30M reported). |
 | NTLNLSR / NTLNLSQR | Net charge-offs / loans, annualized | % | YTD / single-quarter versions. |
 | LNATRES | Allowance for credit losses | $K | The rainy-day fund for bad loans. Since each bank's CECL adoption (2023-01-01 for non-SEC filers like Dacotah) this is the ACL under ASC 326: lifetime expected losses on the whole book, not incurred losses. Same field code across the regime change; the definition underneath moved. Coverage below 1x of noncurrent is not mechanically underprovisioning (secured ag/CRE LGD runs 20-40%), but falling coverage against rising noncurrent is. |
 | LNATRESR | Allowance / gross loans | % | Compare to NCLNLSR: allowance below noncurrent means the fund does not cover known problems. |
 | RSLNLS / RSLNLSR | Restructured (modified) loans, $ and % | $K / % | Extend-and-pretend lives here. A loan reworked to avoid default counts as current but signals borrower distress. Rising RSLNLSR with flat NCLNLSR is a tell. |
 | ELNATR | Provision for credit losses, YTD | $K | Management's estimate, and management chooses the timing. |
+| ELNATQ | Provision for credit losses, quarter | $K | FDIC's own quarterly figure; what the charts plot. Same caveat as NTLNLSQ. |
 | ELNATRY / ELNATRYQ | Provision / avg assets, annualized | % | Provision spikes usually lag the actual deterioration. |
 
 Games to watch: (1) provision timing is discretionary; under-provisioning flatters earnings until charge-offs force the issue. Coverage check: `LNATRES / NCLNLS` falling toward or below 1 means known bad loans exceed the fund. (2) Restructuring keeps loans out of NCLNLS. (3) The 30-89 bucket (P3ASSET) leads the 90+ bucket by a quarter or two; a clean NCLNLSR with a swelling P3ASSET is deterioration in transit.
