@@ -1,0 +1,72 @@
+# Monthly data refresh. Rebuilds the shipped data in app/data/ (failures
+# panel, cross-section, institution directory), checks it with the
+# integrity test, commits any change, then starts the normal
+# "Test and deploy" workflow so both sites pick it up.
+#
+# Any failure (FDIC API down, integrity check trips) stops the job before
+# the commit, so the last good data stays live and GitHub emails the
+# repo owner. Run it by hand from the Actions tab via "Run workflow".
+name: Refresh data
+
+on:
+  schedule:
+    - cron: "0 9 3 * *"   # 09:00 UTC on the 3rd of each month
+  workflow_dispatch:
+
+permissions:
+  contents: write   # push the refreshed data
+  actions: write    # start the deploy workflow
+
+env:
+  PKG_REPO: "https://packagemanager.posit.co/cran/__linux__/noble/2026-07-15"
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "4.5.1"
+
+      # Same key as the deploy workflow's test job, so it reuses that cache
+      - name: Cache R packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.R_LIBS_USER }}
+          key: rlib-test-noble-r451-snap20260715-${{ hashFiles('DESCRIPTION') }}
+
+      - name: Install pinned packages
+        run: |
+          Rscript -e '
+            options(timeout = 300, warn = 1)
+            pkgs <- trimws(strsplit(read.dcf("DESCRIPTION")[, "Imports"], ",")[[1]])
+            install.packages(pkgs, repos = Sys.getenv("PKG_REPO"))
+          '
+
+      - name: Rebuild failures panel
+        run: Rscript app/build/build_fail_panel.R
+
+      - name: Refresh cross-section and institution directory
+        run: Rscript app/build/sync_assets.R
+
+      - name: Integrity check on the fresh data
+        run: Rscript app/tests/integrity.R
+
+      - name: Commit and deploy if anything changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git add app/data
+          if git diff --cached --quiet; then
+            echo "No data changes; nothing to deploy."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Refresh FDIC data ($(date -u +%Y-%m-%d))"
+          git push
+          # A push made with this token does not trigger other workflows;
+          # a workflow_dispatch does, so start the deploy explicitly
+          gh workflow run deploy.yml --ref main
