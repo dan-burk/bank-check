@@ -25,7 +25,15 @@ derive <- function(df) {
       date        = as.Date(as.character(RISDATE), format = "%Y%m%d"),
       qlab        = paste0("Q", (as.integer(format(date, "%m")) - 1) %/% 3 + 1,
                            "'", format(date, "%y")),
-      gross_lns   = LNLSNET + LNATRES,
+      # FDIC's own gross loans. Net + allowance equals it wherever both
+      # exist, but US branches of foreign banks report no allowance, so the
+      # sum went NA for them. The sum stays as the fallback for data cached
+      # or shipped before LNLSGR was fetched.
+      gross_lns   = if ("LNLSGR" %in% names(df)) {
+        dplyr::coalesce(LNLSGR, LNLSNET + LNATRES)
+      } else {
+        LNLSNET + LNATRES
+      },
       p3_pct      = 100 * P3LNLS / gross_lns,
       alw_cover   = ifelse(NCLNLS > 0, LNATRES / NCLNLS, NA),
       bro_pct_dep = 100 * BRO / DEP,

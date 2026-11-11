@@ -43,6 +43,12 @@ weird <- function(cert, msg) {
   WEIRD <<- c(WEIRD, sprintf("CERT %s: %s", cert, msg))
 }
 
+# Gross loans straight from the raw columns: FDIC's LNLSGR when the data
+# carries it (older cached or shipped copies predate it), else net + allowance
+raw_gross <- function(raw) {
+  if (is.null(raw$LNLSGR)) raw$LNLSNET + raw$LNATRES else raw$LNLSGR
+}
+
 # Trace values as plotted, NULL-safe (a NULL in a built list is a gap)
 num_y <- function(y) {
   if (is.list(y)) y <- lapply(y, function(v) if (is.null(v)) NA else v)
@@ -166,11 +172,24 @@ XS_RISDATE <- as.integer(sub("^.*xs_([0-9]{8})\\.rds$", "\\1", xs_path))
 xs_raw <- readRDS(xs_path)
 xs_raw$CERT <- as.integer(xs_raw$CERT)
 
+# FDIC identity: gross loans = net loans + allowance, wherever all three
+# are reported. A break means one of the app's loan denominators is off.
+if (!is.null(xs_raw$LNLSGR)) {
+  id_gap <- xs_raw$LNLSGR - (xs_raw$LNLSNET + xs_raw$LNATRES)
+  bad <- which(is.finite(id_gap) & abs(id_gap) > 1)
+  for (i in bad) weird(xs_raw$CERT[i], sprintf(
+    "LNLSGR %s != LNLSNET + LNATRES %s", xs_raw$LNLSGR[i],
+    xs_raw$LNLSNET[i] + xs_raw$LNATRES[i]))
+  cat("gross loans identity: checked", sum(is.finite(id_gap)), "banks,",
+      length(bad), "breaks
+")
+}
+
 # Weird #1 is pinned; #2 is screened deterministically (no seed): the
 # largest bank whose latest filing is extreme — no loan book, deposits
 # under 0.5% of assets, or a near-all-equity balance sheet
 WEIRD1 <- 35164L
-ln_book  <- xs_raw$LNLSNET + xs_raw$LNATRES
+ln_book  <- raw_gross(xs_raw)
 scr <- data.frame(
   CERT     = xs_raw$CERT,
   ASSET    = xs_raw$ASSET,
@@ -221,7 +240,7 @@ for (cert in roster$CERT) {
   r   <- xs[xs$CERT == cert, ]
   stopifnot(nrow(raw) == 1, nrow(r) == 1)
   tag <- function(nm) paste0(nm, " CERT ", cert)
-  gross <- raw$LNLSNET + raw$LNATRES
+  gross <- raw_gross(raw)
 
   # derive() vs our own arithmetic on the raw columns
   expect_near(tag("gross_lns"), r$gross_lns, gross)
@@ -377,7 +396,7 @@ if (!run_live) {
       list(p = p, bt = bt)
     }
 
-    gross_full <- raw$LNLSNET + raw$LNATRES
+    gross_full <- raw_gross(raw)
 
     # Funding Mix: three shares of the same deposit denominator, 1dp,
     # window >= 2015 (Core NA-guarded on DEP, exactly as derive() does)

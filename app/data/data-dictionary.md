@@ -34,9 +34,10 @@ The delinquency pipeline, in order: current -> 30-89 days late (P3LNLS) -> 90+ d
 | Code | What it is | Units | Watch out |
 |---|---|---|---|
 | LNLSNET | Net loans and leases | $K | Net of allowance. |
+| LNLSGR | Gross loans and leases | $K | Before subtracting the allowance; the denominator for every "% of gross loans" figure. Equals LNLSNET + LNATRES wherever both are reported (verified on all 4,296 such banks, 2026 Q2); US branches of foreign banks report no LNATRES, so only LNLSGR covers them. |
 | NCLNLS | Noncurrent loans and leases | $K | 90+ days past due or nonaccrual. NCLNLS = P9LNLS + NALNLS (verified). |
 | NCLNLSR | Noncurrent / gross loans | % | The headline asset-quality ratio. |
-| P3LNLS | Loans 30-89 days past due | $K | The earliest public warning bucket. No ratio variant exists; divide by gross loans (LNLSNET + LNATRES). |
+| P3LNLS | Loans 30-89 days past due | $K | The earliest public warning bucket. No ratio variant exists; divide by gross loans (LNLSGR). |
 | P9LNLS | Loans 90+ days past due, still accruing | $K | Usually small; banks must move loans to nonaccrual unless well-secured. |
 | NALNLS | Nonaccrual loans | $K | Interest recognition stopped. The bulk of NCLNLS at most banks. |
 | P3ASSET | 30-89 days past due assets | $K | Asset-denominated twin of P3LNLS (includes debt securities); use the LNLS versions for loan-quality work. |
