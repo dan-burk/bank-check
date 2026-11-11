@@ -4,6 +4,9 @@ COL_MAIN  <- "#2C5F8A"   # steel blue: the selected bank
 COL_ALERT <- "#C0392B"   # brick red: stress series
 COL_EARLY <- "#E69F00"   # amber: early-warning series
 COL_GRAY  <- "#7F8C8D"
+COL_GOOD  <- "#1B7837"   # green: a KPI moved the healthy way
+COL_FG    <- "#1F2933"   # body text
+COL_PANEL <- "#F4F7FA"   # KPI box fill
 
 # Threshold lines and the peer band (middle half of all FDIC banks)
 COL_WARN  <- "#C9A227"                    # yellow dotted: watch level
@@ -50,7 +53,7 @@ TRAJ_PALETTE <- c("#E69F00", "#D55E00", "#009E73", "#CC79A7", "#56B4E9",
 app_theme <- function() {
   bslib::bs_theme(
     version = 5,
-    bg = "#FFFFFF", fg = "#1F2933",
+    bg = "#FFFFFF", fg = COL_FG,
     primary = COL_MAIN, danger = COL_ALERT,
     base_font = 'system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
     heading_font = 'system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',

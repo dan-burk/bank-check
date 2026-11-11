@@ -138,7 +138,7 @@ scan_traces <- function(traces, tag, cert) {
 }
 
 # Independent in-year differencing of a YTD flow field. Base-R on purpose:
-# shares no code with add_nco_q/prov_nco_bars (dplyr lag), so a bug there
+# shares no code with ytd_to_quarterly/prov_nco_bars (dplyr lag), so a bug there
 # cannot hide here. First filing of a calendar year = the YTD value as-is,
 # matching the app's lag(default = 0) semantics.
 qflow <- function(risdate, ytd) {

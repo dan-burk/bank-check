@@ -319,11 +319,13 @@ loan_mix <- function(df, mode = "pct", from_date = as.Date("2010-01-01")) {
   base_layout(p, if (mode == "pct") "% of gross loans" else sc$word)
 }
 
-# Quarterly net charge-offs from the YTD field (in-year difference)
-add_nco_q <- function(df) {
+# Call reports give income-statement items year-to-date; differencing within
+# each year recovers the quarterly flow (Q1 is the YTD value itself)
+ytd_to_quarterly <- function(df, ytd_col, out_col) {
   df |>
     dplyr::group_by(yr = format(date, "%Y")) |>
-    dplyr::mutate(nco_q = NTLNLS - dplyr::lag(NTLNLS, default = 0)) |>
+    dplyr::mutate("{out_col}" := .data[[ytd_col]] -
+                    dplyr::lag(.data[[ytd_col]], default = 0)) |>
     dplyr::ungroup()
 }
 
@@ -339,7 +341,7 @@ risk_cushion <- function(df, mode = "pct", df2 = NULL,
   banks <- if (is.null(df2)) list(df) else list(df, df2)
   bar_cols <- c("#D9B8B3", "#C3CBD4")
   dds <- lapply(banks, function(b) {
-    add_nco_q(b) |> dplyr::filter(date >= from_date)
+    ytd_to_quarterly(b, "NTLNLS", "nco_q") |> dplyr::filter(date >= from_date)
   })
   # Dollar unit pooled across BOTH banks: one axis, one unit
   sc <- if (mode == "usd") {
@@ -449,10 +451,8 @@ pipeline_lines <- function(df, df2 = NULL, from_date = as.Date("2019-01-01")) {
 prov_nco_bars <- function(df, mode = "usd", from = 20220101) {
   dd <- df |>
     dplyr::filter(RISDATE >= from) |>
-    dplyr::group_by(yr = format(date, "%Y")) |>
-    dplyr::mutate(prov_q = ELNATR - dplyr::lag(ELNATR, default = 0),
-                  nco_q  = NTLNLS - dplyr::lag(NTLNLS, default = 0)) |>
-    dplyr::ungroup()
+    ytd_to_quarterly("ELNATR", "prov_q") |>
+    ytd_to_quarterly("NTLNLS", "nco_q")
   if (mode == "pct") {
     prov <- round(100 * dd$prov_q / dd$gross_lns, 3)
     nco  <- round(100 * dd$nco_q / dd$gross_lns, 3)
@@ -494,11 +494,12 @@ trajectory_plot <- function(sel_panel, code, meta, baseline = NULL,
   y_title <- row$label[1]
 
   dd <- sel_panel |>
-    dplyr::filter(!is.na(fail_date), qtrs_before >= 0, qtrs_before <= 20)
+    dplyr::filter(!is.na(fail_date), qtrs_before >= 0,
+                  qtrs_before <= MAX_QTRS_BEFORE)
   # Last 21 rows by date, not last 21 finite values: NA quarters must stay
   # as gaps or the line compresses time and misaligns against the x axis
   ref_tail <- if (!is.null(ref_df) && code %in% names(ref_df)) {
-    utils::tail(ref_df, 21)
+    utils::tail(ref_df, MAX_QTRS_BEFORE + 1)
   } else NULL
   ref_vals <- if (!is.null(ref_tail)) {
     ref_tail[[code]][is.finite(ref_tail[[code]])]

@@ -22,7 +22,6 @@ library(dplyr)
 source(paste0(getwd(), "/app/R/api.R"))
 
 OUT_DIR <- paste0(getwd(), "/app/data")
-MAX_QTRS_BEFORE <- 20
 CHUNK_SIZE <- 50
 FDIC_FAILURES_ENDPOINT <- "https://api.fdic.gov/banks/failures"
 

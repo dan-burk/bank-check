@@ -38,27 +38,6 @@ derive <- function(df) {
     )
 }
 
-# Base store: the 7-bank comparison panel, with Dacotah swapped for its
-# longer 1984+ pull from analysis 001.
-load_base_banks <- function() {
-  panel <- readRDS("data/panel_histories.rds")
-  dacotah <- readRDS("data/dacotah_expanded.rds") |>
-    dplyr::mutate(label = "Dacotah (SD)", fail_date = as.Date(NA))
-
-  panel <- panel |> dplyr::filter(label != "Dacotah (SD)")
-  dplyr::bind_rows(panel, dacotah) |>
-    derive() |>
-    dplyr::mutate(
-      # Quarters before failure as an exact quarter-index difference
-      fail_dt   = as.Date(fail_date),
-      qidx      = as.integer(format(date, "%Y")) * 4 +
-                  (as.integer(format(date, "%m")) - 1) %/% 3,
-      fail_qidx = as.integer(format(fail_dt, "%Y")) * 4 +
-                  (as.integer(format(fail_dt, "%m")) - 1) %/% 3,
-      qtrs_before = ifelse(!is.na(fail_dt), fail_qidx - qidx, NA)
-    )
-}
-
 # All ~570 post-2000 failures: pre-failure quarterly histories (0-20
 # quarters before failure) built once by app/build/build_fail_panel.R.
 # qtrs_before is stored in the rds; derive() adds the shared derived columns.
@@ -79,7 +58,7 @@ load_fail_meta <- function() {
 fail_median <- function(panel, code, min_n = 5) {
   if (!code %in% names(panel)) return(NULL)
   panel |>
-    dplyr::filter(qtrs_before >= 0, qtrs_before <= 20) |>
+    dplyr::filter(qtrs_before >= 0, qtrs_before <= MAX_QTRS_BEFORE) |>
     dplyr::group_by(qtrs_before) |>
     dplyr::summarise(
       n   = sum(is.finite(.data[[code]])),
@@ -165,6 +144,13 @@ xs_quarter_label <- function(xs) {
 
 # Per-metric peer quantiles for every rate metric in fields_meta. Quantiles,
 # not mean/sd: bank ratios have heavy tails (see analysis/003).
+# One metric's row of peer_stats() output, or NULL if that metric has no
+# peer stats (charts then skip the band)
+peer_for <- function(code, peer) {
+  r <- peer[peer$code == code, ]
+  if (nrow(r) > 0) r else NULL
+}
+
 peer_stats <- function(xs, meta) {
   codes <- meta$code[meta$units %in% c("pct", "x")]
   rows <- lapply(codes, function(cd) {

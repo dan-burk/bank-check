@@ -42,11 +42,6 @@ asset <- function(file) {
   if (is.na(hash)) file else paste0(file, "?v=", substr(hash, 1, 8))
 }
 
-peer_for <- function(code) {
-  r <- PEER[PEER$code == code, ]
-  if (nrow(r) > 0) r else NULL
-}
-
 # Footnote under every metric chart: formula and caveat, a color-swatch key
 # for whatever reference lines the chart actually drew (threshold_layers in
 # plots.R), then one starred definition per unfamiliar term (the `stars`
@@ -69,7 +64,7 @@ metric_footnote <- function(code) {
       lbl <- if (!is.na(row$crit_label[1])) row$crit_label[1] else "Regulatory floor"
       swatches[[length(swatches) + 1]] <- line_swatch(COL_CRIT, lbl)
     }
-    if (!is.null(peer_for(code))) {
+    if (!is.null(peer_for(code, PEER))) {
       swatches[[length(swatches) + 1]] <-
         line_swatch(COL_GRAY, paste0("Median, all FDIC banks, ", XS_LABEL,
                                      " (band: middle 50%)"))
@@ -100,6 +95,14 @@ star_lines <- function(stars) {
 chip_header <- function(title, group) {
   card_header(class = "d-flex justify-content-between align-items-center gap-2",
               span(title), cat_chip(group))
+}
+
+# Card header with a %/$ toggle on the right (same flex rule as above)
+mode_header <- function(title, input_id) {
+  card_header(class = "d-flex justify-content-between align-items-center",
+              title,
+              radioButtons(input_id, NULL, inline = TRUE,
+                           choices = c("%" = "pct", "$" = "usd")))
 }
 
 # Dotted-line swatch matching threshold_layers() in plots.R, for legends
@@ -275,11 +278,7 @@ ui <- page_navbar(
         "Reserves",
         layout_columns(
           col_widths = breakpoints(xs = c(12, 12), lg = c(6, 6)),
-          card(card_header(
-                 class = "d-flex justify-content-between align-items-center",
-                 "Risk vs Cushion",
-                 radioButtons("rc_mode", NULL, inline = TRUE,
-                              choices = c("%" = "pct", "$" = "usd"))),
+          card(mode_header("Risk vs Cushion", "rc_mode"),
                plotlyOutput("rc_plot", height = "400px"),
                card_footer(class = "text-muted small",
                            div(paste0("The allowance* should cover the ",
@@ -293,11 +292,7 @@ ui <- page_navbar(
                                             "the largest banks) the allowance covers expected ",
                                             "lifetime losses, so the line can jump without ",
                                             "new trouble")))),
-          card(card_header(
-                 class = "d-flex justify-content-between align-items-center",
-                 "Provision vs Charge-offs",
-                 radioButtons("prov_mode", NULL, inline = TRUE,
-                              choices = c("%" = "pct", "$" = "usd"))),
+          card(mode_header("Provision vs Charge-offs", "prov_mode"),
                plotlyOutput("prov_plot", height = "400px"),
                card_footer(class = "text-muted small",
                            div(paste0("Provision* adds to the allowance; ",
@@ -311,11 +306,7 @@ ui <- page_navbar(
       nav_panel(
         "Loan Mix",
         card(
-          card_header(
-            class = "d-flex justify-content-between align-items-center",
-            "What the Bank Lends Against",
-            radioButtons("mix_mode", NULL, inline = TRUE,
-                         choices = c("%" = "pct", "$" = "usd"))),
+          mode_header("What the Bank Lends Against", "mix_mode"),
           plotlyOutput("mix_plot", height = "440px"),
           card_footer(class = "text-muted small",
                       div(paste0("Each band is a share of the loan book. ",
@@ -383,7 +374,8 @@ ui <- page_navbar(
                                       placeholder = "Search failed banks...")),
         helpText("All FDIC failures since 2000, aligned on quarters before ",
                  "failure. Gray line: median of the filtered set. Dashed ",
-                 "line: the selected bank's last 20 quarters, ending at ",
+                 "line: the selected bank's last ", MAX_QTRS_BEFORE,
+                 " quarters, ending at ",
                  "today. Failed banks often stop filing one or two ",
                  "quarters before the failure date, so lines can end ",
                  "early.")
@@ -412,7 +404,7 @@ ui <- page_navbar(
 server <- function(input, output, session) {
 
   # Empty, not seeded: Dacotah and First B&T used to be preloaded from the
-  # shipped panel_histories.rds, which nothing refreshes, so they alone
+  # a shipped snapshot, which nothing refreshed, so they alone
   # rendered frozen at that file's last quarter while every other bank came
   # back live. They now take the same fetch path as the other ~4,200.
   loaded <- reactiveVal(list())
@@ -537,13 +529,13 @@ server <- function(input, output, session) {
         paste0(arrow, " ", fmt_value(abs(delta), meta_row$units[1]))
       }
       trend_color <- if (is.na(delta)) "#666" else
-        if ((delta >= 0) == good) "#1B7837" else "#C0392B"
+        if ((delta >= 0) == good) COL_GOOD else COL_ALERT
       value_box(
         class = "kpi-compact",
         title = k$title,
         value = fmt_value(val, meta_row$units[1]),
         span(class = "kpi-delta", style = paste0("color:", trend_color), trend),
-        theme = value_box_theme(bg = "#F4F7FA", fg = "#1F2933")
+        theme = value_box_theme(bg = COL_PANEL, fg = COL_FG)
       )
     })
     # One caption carries "vs 1y ago" instead of repeating it in every box
@@ -607,7 +599,8 @@ server <- function(input, output, session) {
     ii <- i
     output[[paste0("tile_", ii)]] <- renderPlotly({
       code <- CAMELS_TILES[[ii]]$code
-      camels_mini(sel_banks(), code, FIELDS_META, sel_cols(), peer_for(code))
+      camels_mini(sel_banks(), code, FIELDS_META, sel_cols(),
+                  peer_for(code, PEER))
     })
   })
 
@@ -651,8 +644,9 @@ server <- function(input, output, session) {
       bank_gate()
       disp <- input[[paste0(eid, "_display")]]
       if (is.null(disp)) disp <- "level"
-      metric_ts(sel_banks(), input[[metric_input]], FIELDS_META, sel_cols(),
-                display = disp, peer = peer_for(input[[metric_input]]))
+      code <- input[[metric_input]]
+      metric_ts(sel_banks(), code, FIELDS_META, sel_cols(),
+                display = disp, peer = peer_for(code, PEER))
     })
   })
 
@@ -680,7 +674,7 @@ server <- function(input, output, session) {
   output$sens_plot <- renderPlotly({
     bank_gate()
     metric_ts(sel_banks(), "unrl_pct_eq", FIELDS_META, sel_cols(),
-              peer = peer_for("unrl_pct_eq"))
+              peer = peer_for("unrl_pct_eq", PEER))
   })
   output$sens_caveat <- renderUI({ metric_footnote("unrl_pct_eq") })
 

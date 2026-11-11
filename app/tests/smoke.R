@@ -15,7 +15,9 @@ source("R/theme.R")
 source("R/data.R")
 source("R/plots.R")
 
-BASE <- load_base_banks()
+# Two-bank fixture (Dacotah 1984+, First B&T) in raw API columns, so the
+# test exercises derive() just as a live fetch would
+BASE <- readRDS("tests/fixtures/sd_banks.rds") |> derive()
 inst <- fetch_institutions_cached()
 PEER <- peer_stats(fetch_cross_section_cached(), FIELDS_META)
 stopifnot(nrow(PEER) >= 15, all(c("p25", "p50", "p75") %in% names(PEER)))
@@ -27,10 +29,6 @@ stopifnot(nrow(FAIL_META) > 500, !any(is.na(FAIL_META$region)),
           all(FAIL_META$n_filings > 0))
 cat("fail panel:", nrow(FAIL_PANEL), "rows,", nrow(FAIL_META), "banks\n")
 
-pf <- function(code) {
-  r <- PEER[PEER$code == code, ]
-  if (nrow(r) > 0) r else NULL
-}
 ok <- function(nm, p) {
   stopifnot(inherits(p, "plotly"))
   cat("ok:", nm, "\n")
@@ -44,7 +42,7 @@ cols  <- c("Dacotah (SD)" = "#2C5F8A", "First B&T (SD)" = "#0072B2")
 # Every metric through the shared time-series builder, band included
 for (code in FIELDS_META$code) {
   ok(paste("metric_ts", code),
-     metric_ts(banks, code, FIELDS_META, cols, peer = pf(code)))
+     metric_ts(banks, code, FIELDS_META, cols, peer = peer_for(code, PEER)))
 }
 ok("metric_ts pct_assets",
    metric_ts(banks, "DEPUNINS", FIELDS_META, cols, display = "pct_assets"))
@@ -72,7 +70,7 @@ cat("ok: shared $ axis unit across mixed-size banks\n")
 for (code in c("ASSET", "RBC1AAJ", "NCLNLSR", "p3_pct", "ROAQ", "COREDEPR",
                "unrl_pct_eq")) {
   ok(paste("camels_mini", code),
-     camels_mini(banks, code, FIELDS_META, cols, pf(code)))
+     camels_mini(banks, code, FIELDS_META, cols, peer_for(code, PEER)))
 }
 
 sel <- data.frame(
