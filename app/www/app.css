@@ -1,0 +1,71 @@
+/* Styles for Bank Check. Colors match R/theme.R (#2C5F8A = COL_MAIN). */
+
+/* ---- Data dictionary ----------------------------------------------------
+   commonmark emits bare <table> tags that Bootstrap 5 leaves unstyled; the
+   gsub in output$dict_full adds .table classes and this handles sizing and
+   heading rhythm. */
+.dict-md { max-width: 72rem; }
+.dict-md h1 { font-size: 1.4rem; }
+.dict-md h2 { font-size: 1.15rem; margin-top: 1.5rem;
+              border-bottom: 1px solid #DEE2E6; padding-bottom: 0.3rem; }
+.dict-md table { font-size: 0.92rem; }
+#dict_table { font-size: 0.95rem; }
+
+/* Wide tables scroll sideways on phones instead of overflowing */
+@media (max-width: 767px) {
+  .dict-md table { display: block; overflow-x: auto; }
+}
+
+/* ---- Overview KPI boxes -------------------------------------------------
+   bslib's value_box defaults (big padding, tall min-height, 2rem value)
+   dwarf a label, a number and a trend. */
+.bslib-value-box.kpi-compact { min-height: 0 !important; }
+.kpi-compact > .card-body { padding: 0 !important; }
+.kpi-compact .value-box-area { padding: .5rem .75rem !important;
+                               gap: 0 !important; }
+.kpi-compact .value-box-title { font-size: .78rem; color: #5B6670;
+                                margin-bottom: 0 !important;
+                                white-space: nowrap; overflow: hidden;
+                                text-overflow: ellipsis; }
+.kpi-compact .value-box-value { font-size: 1.25rem; font-weight: 600;
+                                line-height: 1.3;
+                                margin-bottom: 0 !important; }
+.kpi-compact .kpi-delta { font-size: .75rem; }
+
+/* ---- Directory table ----------------------------------------------------
+   Assets column is searchable=FALSE (rank-only); DT still draws a disabled
+   'All' box there, which begs a click that does nothing. */
+#dir_table thead td:nth-child(4) input { display: none; }
+
+/* ---- Fetch overlay (behavior in app.js) -------------------------------- */
+#fetch_overlay { position: fixed; inset: 0; z-index: 2000;
+                 display: none; align-items: center; justify-content: center;
+                 background: rgba(255,255,255,0.85); }
+#fetch_overlay .box { text-align: center; max-width: 26rem; padding: 0 1rem; }
+#fetch_overlay .spinner { width: 3rem; height: 3rem; margin: 0 auto 1rem;
+                          border: 4px solid #DEE2E6;
+                          border-top-color: #2C5F8A; border-radius: 50%;
+                          animation: fetchspin 0.9s linear infinite; }
+#fetch_overlay .headline { font-weight: 600; color: #1F2933; }
+#fetch_overlay .joke { color: #666; font-size: 0.95rem;
+                       min-height: 3rem; margin-top: 0.5rem; }
+@keyframes fetchspin { to { transform: rotate(360deg); } }
+
+/* ---- Boot overlay (behavior in app.js) --------------------------------- */
+#boot_overlay { position: fixed; inset: 0; z-index: 3000;
+                display: flex; flex-direction: column;
+                align-items: center; justify-content: center;
+                background: #F7F9FB; padding: 0 16px;
+                text-align: center; transition: opacity 0.5s; }
+#boot_overlay img { width: 64px; height: 64px; margin-bottom: 10px; }
+#boot_overlay h1 { font-size: 28px; color: #1F2933; font-weight: 600;
+                   margin: 0 0 24px; }
+#boot_overlay .bar { width: min(420px, 100%); height: 10px;
+                     background: #DEE2E6; border-radius: 5px;
+                     overflow: hidden; position: relative; }
+#boot_overlay .bar::after { content: ''; position: absolute; top: 0;
+                            bottom: 0; width: 35%; background: #2C5F8A;
+                            border-radius: 5px;
+                            animation: bootslide 1.4s ease-in-out infinite; }
+#boot_overlay .msg { margin-top: 14px; font-size: 17px; color: #1F2933; }
+@keyframes bootslide { from { left: -35%; } to { left: 100%; } }

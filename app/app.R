@@ -32,6 +32,16 @@ TRAJ_SIZES   <- c("Under $100M", "$100M to $1B", "$1B to $10B", "Over $10B")
 
 EMPTY_MSG <- "Search for a bank in the sidebar to load its history."
 
+# URL for a file in www/ with a short content hash, e.g. "app.js?v=1a2b3c4d".
+# The hash changes whenever the file does, so browsers refetch after a
+# deploy instead of serving a stale cached copy. Falls back to the bare
+# name if hashing fails (the file still loads, just without cache-busting).
+asset <- function(file) {
+  hash <- tryCatch(unname(tools::md5sum(file.path("www", file))),
+                   error = function(e) NA)
+  if (is.na(hash)) file else paste0(file, "?v=", substr(hash, 1, 8))
+}
+
 peer_for <- function(code) {
   r <- PEER[PEER$code == code, ]
   if (nrow(r) > 0) r else NULL
@@ -176,175 +186,40 @@ ui <- page_navbar(
   # default, showed it). Pages flow and scroll like documents everywhere.
   fillable = FALSE,
   header = tagList(
-    # Google Analytics, shared with danielburkhalter.dev and the other apps.
-    # Only the live hosts report, so local runs stay out of the numbers.
-    # The path is fixed because both shinyapps.io and shinylive run the
-    # app inside an iframe with a generated URL.
+    # Styles and client-side behavior live in www/ (app.css, app.js,
+    # analytics.js). Shiny serves www/ at the app root on both deploys
+    # (shinyapps.io and shinylive), so plain relative paths work. Plain
+    # (non-defer) scripts in <head> run after Shiny and jQuery load, which
+    # app.js needs. asset() appends a content hash so a deploy never pairs
+    # new R code with a browser-cached old file.
     tags$head(
       # Tab icon. Explicit because browsers otherwise ask for /favicon.ico
       # at the domain root, which 404s on shinyapps.io. Relative, so it
       # resolves through shinyapps.io's worker <base href> to app/www/.
       tags$link(rel = "icon", type = "image/png", href = "logo.png"),
+      tags$link(rel = "stylesheet", href = asset("app.css")),
       tags$script(async = NA,
                   src = "https://www.googletagmanager.com/gtag/js?id=G-3HK7FW9Y6N"),
-      tags$script(HTML("
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        if (['danielburkhalter.dev', 'danielburkhalter.shinyapps.io']
-              .includes(location.hostname)) {
-          gtag('js', new Date());
-          gtag('config', 'G-3HK7FW9Y6N', {
-            page_location: location.origin + '/bank-check/'
-          });
-        }
-      "))
+      tags$script(src = asset("analytics.js")),
+      tags$script(src = asset("app.js"))
     ),
-    # Dictionary styling: commonmark emits bare <table> tags that Bootstrap
-    # 5 leaves unstyled; the gsub in output$dict_full adds .table classes
-    # and this block handles sizing and heading rhythm.
-    tags$style(HTML("
-      .dict-md { max-width: 72rem; }
-      .dict-md h1 { font-size: 1.4rem; }
-      .dict-md h2 { font-size: 1.15rem; margin-top: 1.5rem;
-                    border-bottom: 1px solid #DEE2E6; padding-bottom: 0.3rem; }
-      .dict-md table { font-size: 0.92rem; }
-      #dict_table { font-size: 0.95rem; }
-      /* Overview KPI boxes: bslib's value_box defaults (big padding, tall
-         min-height, 2rem value) dwarf a label, a number and a trend */
-      .bslib-value-box.kpi-compact { min-height: 0 !important; }
-      .kpi-compact > .card-body { padding: 0 !important; }
-      .kpi-compact .value-box-area { padding: .5rem .75rem !important;
-                                     gap: 0 !important; }
-      .kpi-compact .value-box-title { font-size: .78rem; color: #5B6670;
-                                      margin-bottom: 0 !important;
-                                      white-space: nowrap; overflow: hidden;
-                                      text-overflow: ellipsis; }
-      .kpi-compact .value-box-value { font-size: 1.25rem; font-weight: 600;
-                                      line-height: 1.3;
-                                      margin-bottom: 0 !important; }
-      .kpi-compact .kpi-delta { font-size: .75rem; }
-      /* Assets column is searchable=FALSE (rank-only); DT still draws a
-         disabled 'All' box there, which begs a click that does nothing */
-      #dir_table thead td:nth-child(4) input { display: none; }
-      /* Wide tables scroll sideways on phones instead of overflowing */
-      @media (max-width: 767px) {
-        .dict-md table { display: block; overflow-x: auto; }
-      }
-    ")),
     # Dependency primer for shinylive: a hidden static widget makes the
     # browser fetch plotly's JS at page load. Without it, the first server-
     # rendered charts race the 3.5 MB script through the service worker and
     # lose ("Plotly is not defined", blank cards) on uncached first visits.
     div(style = "display:none;", plotly::plot_ly()),
-    # Fetch overlay: spinner plus rotating jokes while a bank's history
-    # downloads. The joke rotation is client-side JS on purpose: during the
-    # fetch the R process is blocked (fully so under webR, where R runs
-    # single-threaded in a worker), so the server cannot push updates until
-    # the download finishes. R only toggles the overlay on and off.
-    tags$style(HTML("
-      #fetch_overlay { position: fixed; inset: 0; z-index: 2000;
-                       display: none; align-items: center; justify-content:
-                       center; background: rgba(255,255,255,0.85); }
-      #fetch_overlay .box { text-align: center; max-width: 26rem;
-                            padding: 0 1rem; }
-      #fetch_overlay .spinner { width: 3rem; height: 3rem; margin: 0 auto
-                                1rem; border: 4px solid #DEE2E6;
-                                border-top-color: #2C5F8A;
-                                border-radius: 50%;
-                                animation: fetchspin 0.9s linear infinite; }
-      #fetch_overlay .headline { font-weight: 600; color: #1F2933; }
-      #fetch_overlay .joke { color: #666; font-size: 0.95rem;
-                             min-height: 3rem; margin-top: 0.5rem; }
-      @keyframes fetchspin { to { transform: rotate(360deg); } }
-    ")),
+    # Fetch overlay, shown by R while a bank's history downloads (see app.js)
     div(id = "fetch_overlay",
         div(class = "box",
             div(class = "spinner"),
             div(class = "headline", "Fetching from FDIC..."),
             div(class = "joke", ""))),
-    tags$script(HTML("
-      (function() {
-        var jokes = [
-          'Why did the banker quit? She lost interest.',
-          'I asked the bank to check my balance. They pushed me over.',
-          'Why are piggy banks so wise? Full of common cents.',
-          'Old bankers never die. They just lose their balance.',
-          'My bank flagged suspicious activity. Apparently saving was out of character.',
-          'The safest place for cash is a snow bank. Frozen assets.',
-          'Where do fish keep their money? In the river bank.',
-          'The loan officer married the teller. Now it is a joint account.',
-          'Quarterly filings since 1984. Good things come to those who wait.',
-          'Dad, are we rich? No son, we are FDIC insured.'
-        ];
-        var timer = null;
-        Shiny.addCustomMessageHandler('fetch_overlay', function(msg) {
-          var el = document.getElementById('fetch_overlay');
-          var jokeEl = el.querySelector('.joke');
-          if (msg.show) {
-            var i = Math.floor(Math.random() * jokes.length);
-            jokeEl.textContent = jokes[i];
-            el.style.display = 'flex';
-            if (timer) clearInterval(timer);
-            timer = setInterval(function() {
-              i = (i + 1) % jokes.length;
-              jokeEl.textContent = jokes[i];
-            }, 4000);
-          } else {
-            el.style.display = 'none';
-            if (timer) { clearInterval(timer); timer = null; }
-          }
-        });
-      })();
-    ")),
-    # Boot overlay: covers the half-built page from first paint until the
-    # server's first flush finishes (first shiny:idle), so visitors see a
-    # branded screen instead of empty cards while the charts render. On
-    # shinylive it sits under the outer loading page (pages/loading.html),
-    # which waits for this element to be removed before fading out, so the
-    # hand-off is seamless. The 60s fallback keeps a stalled or errored
-    # session from hiding the app forever.
-    tags$style(HTML("
-      #boot_overlay { position: fixed; inset: 0; z-index: 3000;
-                      display: flex; flex-direction: column;
-                      align-items: center; justify-content: center;
-                      background: #F7F9FB; padding: 0 16px;
-                      text-align: center; transition: opacity 0.5s; }
-      #boot_overlay img { width: 64px; height: 64px; margin-bottom: 10px; }
-      #boot_overlay h1 { font-size: 28px; color: #1F2933; font-weight: 600;
-                         margin: 0 0 24px; }
-      #boot_overlay .bar { width: min(420px, 100%); height: 10px;
-                           background: #DEE2E6; border-radius: 5px;
-                           overflow: hidden; position: relative; }
-      #boot_overlay .bar::after { content: ''; position: absolute; top: 0;
-                                  bottom: 0; width: 35%; background: #2C5F8A;
-                                  border-radius: 5px;
-                                  animation: bootslide 1.4s ease-in-out
-                                             infinite; }
-      #boot_overlay .msg { margin-top: 14px; font-size: 17px;
-                           color: #1F2933; }
-      @keyframes bootslide { from { left: -35%; } to { left: 100%; } }
-    ")),
+    # Boot overlay: branded screen until the first render finishes (app.js)
     div(id = "boot_overlay",
         tags$img(src = "logo.png", alt = ""),
         tags$h1("Bank Check"),
         div(class = "bar"),
-        div(class = "msg", "Drawing the latest FDIC numbers...")),
-    tags$script(HTML("
-      (function() {
-        var done = false;
-        function hide() {
-          if (done) return;
-          done = true;
-          var el = document.getElementById('boot_overlay');
-          if (!el) return;
-          el.style.opacity = '0';
-          setTimeout(function() { el.remove(); }, 500);
-        }
-        // Short delay: plotly draws client-side just after the values land
-        $(document).one('shiny:idle', function() { setTimeout(hide, 300); });
-        setTimeout(hide, 60000);
-      })();
-    "))
+        div(class = "msg", "Drawing the latest FDIC numbers..."))
   ),
   sidebar = sidebar(
     width = 320,
