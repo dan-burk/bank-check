@@ -228,7 +228,7 @@ ui <- page_navbar(
                    options = list(placeholder = "Search any bank...",
                                   maxOptions = 8)),
     helpText("Supports all active FDIC banks. Quarterly history from 1984 ",
-             "(or Origination) to present."),
+             "to present."),
     # Legal one-liner lives here, not in a page footer: a footer inside the
     # fillable pages fights the flex layout and overlaps the last outputs
     div(class = "text-muted small mt-auto pt-3",
