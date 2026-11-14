@@ -89,7 +89,12 @@ for (d in list(dac, fbt)) {
     stopifnot(inherits(statement_table(d, sec, u, cm), "shiny.tag"))
   }
 }
-cat("ok: statements add up and render in all modes\n")
+two <- statement_table(banks, "bs", "pct", cols = cols)
+two_html <- as.character(two)
+stopifnot(grepl("Dacotah (SD)", two_html, fixed = TRUE),
+          grepl("First B&amp;T (SD)", two_html, fixed = TRUE),
+          !grepl("vs Q", two_html, fixed = TRUE))   # no change column
+cat("ok: statements add up and render in all modes, 1 or 2 banks\n")
 
 sel <- data.frame(
   label = names(banks),

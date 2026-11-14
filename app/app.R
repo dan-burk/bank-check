@@ -583,7 +583,7 @@ server <- function(input, output, session) {
     cmp  <- if (is.null(input$fs_cmp)) "qoq" else input$fs_cmp
     tagList(
       if (unit == "pct") div(class = "text-muted small mb-1", basis),
-      statement_table(cur(), section, unit, cmp),
+      statement_table(sel_banks(), section, unit, cmp, sel_cols()),
       if (section == "bs") {
         div(class = "text-muted small mt-2",
             star_line("Allowance: money set aside for expected loan losses"))
@@ -592,6 +592,9 @@ server <- function(input, output, session) {
   })
   output$bs_table <- statement_ui("bs", "% of total assets")
   output$is_table <- statement_ui("is", "% of revenue")
+  # Comparing banks drops the change column, so QoQ/YoY greys out (app.js)
+  observe(session$sendCustomMessage("fs_cmp_enabled",
+                                    list(on = length(sel_certs()) <= 1)))
 
   # Scoped explorers, one per category page ----
   for (id in names(EXPLORERS)) local({

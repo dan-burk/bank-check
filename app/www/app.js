@@ -59,3 +59,23 @@
   $(document).one('shiny:idle', function() { setTimeout(hide, 300); });
   setTimeout(hide, 60000);
 })();
+
+// QoQ/YoY toggle: disabled while banks are compared (the statements then
+// show one column per bank and no change column). Re-applied whenever the
+// Overview card re-renders, since the radio buttons are rebuilt then.
+(function() {
+  var on = true;
+  function apply() {
+    var group = document.getElementById('fs_cmp');
+    if (!group) return;
+    group.querySelectorAll('input').forEach(function(el) { el.disabled = !on; });
+    group.style.opacity = on ? '' : '0.45';
+  }
+  Shiny.addCustomMessageHandler('fs_cmp_enabled', function(msg) {
+    on = msg.on;
+    apply();
+  });
+  $(document).on('shiny:value', function(e) {
+    if (e.name === 'overview_grid') setTimeout(apply, 0);
+  });
+})();
