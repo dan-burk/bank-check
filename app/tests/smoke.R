@@ -14,6 +14,7 @@ source("R/api.R")
 source("R/theme.R")
 source("R/data.R")
 source("R/plots.R")
+source("R/statements.R")
 
 # Two-bank fixture (Dacotah 1984+, First B&T) in raw API columns, so the
 # test exercises derive() just as a live fetch would
@@ -67,11 +68,28 @@ if (is.list(ttl)) ttl <- ttl$text
 stopifnot(grepl("($B)", ttl, fixed = TRUE))
 cat("ok: shared $ axis unit across mixed-size banks\n")
 
-for (code in c("ASSET", "RBC1AAJ", "NCLNLSR", "p3_pct", "ROAQ", "COREDEPR",
-               "unrl_pct_eq")) {
-  ok(paste("camels_mini", code),
-     camels_mini(banks, code, FIELDS_META, cols, peer_for(code, PEER)))
+# Statements: every block adds up to FDIC's own total, and both tables
+# render in every unit / comparison mode
+for (d in list(dac, fbt)) {
+  L <- statement_lines(d[nrow(d), ])
+  r <- d[nrow(d), ]
+  blk <- function(sec, from, to) {
+    x <- L[L$section == sec, ]
+    sum(x$value[(which(x$label == from) + 1):(which(x$label == to) - 1)],
+        na.rm = TRUE)
+  }
+  stopifnot(abs(blk("bs", "Assets", "Total assets") - r$ASSET) < 1,
+            abs(blk("bs", "Liabilities", "Total liabilities") - r$LIAB) < 1,
+            abs(r$ASSET - r$LIAB - r$EQTOT) < 1)
+  I <- L[L$section == "is", ]
+  below_rev <- I$value[I$kind == "line" & seq_len(nrow(I)) > which(I$label == "Revenue")]
+  stopifnot(abs(I$value[I$label == "Revenue"] + sum(below_rev) - r$NETINCQ) < 1,
+            abs(I$pct[I$label == "Revenue"] - 100) < 1e-9)
+  for (sec in c("bs", "is")) for (u in c("usd", "pct")) for (cm in c("qoq", "yoy")) {
+    stopifnot(inherits(statement_table(d, sec, u, cm), "shiny.tag"))
+  }
 }
+cat("ok: statements add up and render in all modes\n")
 
 sel <- data.frame(
   label = names(banks),
@@ -165,8 +183,7 @@ shiny::testServer(app = "app", {
     cap_metric = "RBC1AAJ", aq_metric = "NCLNLSR",
     earn_metric = "ROA", liq_metric = "LNLSDEPR"
   )
-  outs <- c("kpis", "scale_plot", "overview_grid", "overview_legend",
-            paste0("tile_", 1:6),
+  outs <- c("kpis", "scale_plot", "overview_grid", "bs_table", "is_table",
             "cap_plot", "cap_caveat", "cap_chip",
             "aq_plot", "earn_plot", "liq_plot",
             "pipeline_plot", "rc_plot", "prov_plot", "mix_plot",
@@ -182,6 +199,11 @@ shiny::testServer(app = "app", {
   # in a shipped file, so assert against what bank_label() actually yields
   stopifnot(!is.null(cmp()), cmp()$label[1] == bank_label(3973, inst))
   cat("comparison bank active: yes\n")
+
+  session$setInputs(fs_unit = "pct", fs_cmp = "yoy")
+  stopifnot(grepl("% of total assets", output$bs_table$html, fixed = TRUE),
+            grepl("% of revenue", output$is_table$html, fixed = TRUE))
+  cat("ok output: statements in % vs 1 year ago\n")
 
   session$setInputs(prov_mode = "usd")
   stopifnot(!is.null(output$prov_plot))

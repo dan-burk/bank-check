@@ -104,7 +104,12 @@ fetch_bank_cached <- function(cert, max_age_days = 30) {
   cache <- file.path(CACHE_DIR, paste0("cert_", cert, ".rds"))
   if (file.exists(cache) &&
       difftime(Sys.time(), file.mtime(cache), units = "days") < max_age_days) {
-    return(derive(readRDS(cache)))
+    cached <- readRDS(cache)
+    # A copy saved before a field joined APP_FIELDS is refetched, so new
+    # charts never meet a missing column
+    if (all(strsplit(APP_FIELDS, ",")[[1]] %in% names(cached))) {
+      return(derive(cached))
+    }
   }
   df <- tryCatch(fetch_bank_financials(cert = cert),
                  error = function(e) {

@@ -124,15 +124,6 @@ KPI_DEFS <- list(
 KPI_GOOD_UP <- c(ASSET = TRUE, ROAQ = TRUE, RBC1AAJ = TRUE, NCLNLSR = FALSE,
                  alw_cover = TRUE, COREDEPR = TRUE)
 
-CAMELS_TILES <- list(
-  list(code = "RBC1AAJ",     title = "Tier 1 Leverage"),
-  list(code = "NCLNLSR",     title = "Noncurrent Loans"),
-  list(code = "p3_pct",      title = "30-89 Days Late"),
-  list(code = "ROAQ",        title = "Return on Assets"),
-  list(code = "COREDEPR",    title = "Core Deposits / Assets"),
-  list(code = "unrl_pct_eq", title = "Unrealized Securities Loss / Equity")
-)
-
 # One scoped metric explorer per category page: id -> metric scope + default
 EXPLORERS <- list(
   cap  = list(groups = c("Capital", "Size"),                  default = "RBC1AAJ"),
@@ -560,67 +551,44 @@ server <- function(input, output, session) {
     scale_strip(INSTITUTIONS, sel)
   })
 
-  # Size chart + CAMELS small multiples, comparison banks included ----
-  # The size strip doesn't need full width, so it takes two-thirds of the
-  # first row beside tile 1; the legend fills the slot after tile 6 so the
-  # last row of three isn't left with a gap.
+  # Size chart, then balance sheet and income statement ----
+  # Rendered once per empty <-> picked switch, not per bank change: has_bank
+  # is a reactiveVal, which only fires when its value actually changes, so
+  # the $/% and comparison toggles keep their setting across bank picks.
+  has_bank <- reactiveVal(FALSE)
+  observe(has_bank(bank_picked()))
   output$overview_grid <- renderUI({
-    df <- cur()
-    n <- nrow(df)
-    tiles <- lapply(seq_along(CAMELS_TILES), function(i) {
-      t <- CAMELS_TILES[[i]]
-      meta_row <- FIELDS_META[FIELDS_META$code == t$code, ]
-      val <- fmt_value(df[[t$code]][n], meta_row$units[1])
+    req(has_bank())
+    tagList(
+      card(chip_header("Every FDIC Bank by Size", "Size"),
+           plotlyOutput("scale_plot", height = "200px")),
       card(
         card_header(
-          class = "py-1 small d-flex justify-content-between align-items-center gap-2",
-          span(paste0(t$title, ": ", val)), cat_chip(meta_row$group[1])
-        ),
-        plotlyOutput(paste0("tile_", i), height = "200px")
+          class = "d-flex flex-wrap justify-content-between align-items-center gap-2",
+          "Balance Sheet & Income",
+          div(class = "d-flex flex-wrap column-gap-4",
+              radioButtons("fs_unit", NULL, inline = TRUE,
+                           choices = c("$" = "usd", "%" = "pct")),
+              radioButtons("fs_cmp", NULL, inline = TRUE,
+                           choices = c("vs last quarter" = "qoq",
+                                       "vs 1 year ago" = "yoy")))),
+        layout_columns(
+          col_widths = breakpoints(xs = 12, lg = c(6, 6)),
+          div(tags$h6("Balance sheet"), uiOutput("bs_table")),
+          div(tags$h6("Income statement"), uiOutput("is_table")))
       )
-    })
-    size_card <- card(
-      chip_header("Every FDIC Bank by Size", "Size"),
-      plotlyOutput("scale_plot", height = "200px")
     )
-    legend_card <- card(
-      card_header(class = "py-1 small", "Reading the charts"),
-      uiOutput("overview_legend")
-    )
+  })
+  statement_ui <- function(section, basis) renderUI({
+    unit <- if (is.null(input$fs_unit)) "usd" else input$fs_unit
+    cmp  <- if (is.null(input$fs_cmp)) "qoq" else input$fs_cmp
     tagList(
-      layout_columns(col_widths = breakpoints(xs = 12, lg = c(8, 4)),
-                     size_card, tiles[[1]]),
-      do.call(layout_columns,
-              c(list(col_widths = breakpoints(xs = 12, sm = 6, xl = 4)),
-                tiles[-1], list(legend_card)))
+      if (unit == "pct") div(class = "text-muted small mb-1", basis),
+      statement_table(cur(), section, unit, cmp)
     )
   })
-  for (i in seq_along(CAMELS_TILES)) local({
-    ii <- i
-    output[[paste0("tile_", ii)]] <- renderPlotly({
-      code <- CAMELS_TILES[[ii]]$code
-      camels_mini(sel_banks(), code, FIELDS_META, sel_cols(),
-                  peer_for(code, PEER))
-    })
-  })
-
-  # One legend for the whole overview page, in the grid's last slot ----
-  # Stacked one item per line to fit a one-third-width card
-  output$overview_legend <- renderUI({
-    cols <- sel_cols()
-    dots <- lapply(names(cols), function(lb) {
-      div(span(style = paste0("display:inline-block; width:10px; height:10px;",
-                              "border-radius:5px; background:", cols[[lb]],
-                              "; margin-right:5px;")),
-          lb)
-    })
-    div(class = "text-muted small d-flex flex-column gap-1",
-        dots,
-        line_swatch(COL_WARN, "Watch level"),
-        line_swatch(COL_CRIT, "Regulatory floor"),
-        line_swatch(COL_GRAY, paste0("Median of all FDIC banks, ",
-                                     XS_LABEL)))
-  })
+  output$bs_table <- statement_ui("bs", "% of total assets")
+  output$is_table <- statement_ui("is", "% of revenue")
 
   # Scoped explorers, one per category page ----
   for (id in names(EXPLORERS)) local({

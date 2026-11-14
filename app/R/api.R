@@ -32,7 +32,9 @@ APP_FIELDS <- paste0(
   "LNREMULT,LNREMULTR,",
   "NCLNLSR,LNATRES,RSLNLS,RSLNLSR,P3LNLS,P9LNLS,NALNLS,",
   "EQV,ERNASTR,",
-  "ROAQ,ROEQ,NIMYQ,ELNATRYQ,NTLNLSQR"
+  "ROAQ,ROEQ,NIMYQ,ELNATRYQ,NTLNLSQR,",
+  # Statement lines for the Overview (quarterly income, borrowings)
+  "NIMQ,NONIIQ,NONIXQ,IGLSECQ,ITAXQ,NETINCQ,SUBND"
 )
 
 # Download to a temp file and read the whole body back. Verified in all

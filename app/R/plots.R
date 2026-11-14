@@ -169,51 +169,6 @@ metric_ts <- function(banks, code, meta, cols, display = "level", peer = NULL) {
   base_layout(p, y_title, yrange = yrange) |> range_buttons()
 }
 
-# Compact CAMELS tile: one headline metric, last 10 years, all selected
-# banks, no legend (the overview page carries one shared legend row)
-camels_mini <- function(banks, code, meta, cols, peer = NULL) {
-  row <- meta[meta$code == code, ]
-  pre <- ""
-  suf <- if (row$units[1] == "pct") "%" else if (row$units[1] == "x") "x" else ""
-  series <- list()
-  for (lb in names(banks)) {
-    df <- banks[[lb]]
-    if (!code %in% names(df)) next
-    dd <- df[df$date >= max(df$date) - 3653, ]
-    series[[lb]] <- list(x = dd$date, y = dd[[code]])
-  }
-  # Dollar unit resolved once across all banks (one axis, one unit)
-  if (row$units[1] == "usd_k") {
-    sc <- usd_axis_unit(unlist(lapply(series, `[[`, "y")))
-    series <- lapply(series, function(s) { s$y <- s$y / sc$div; s })
-    pre <- "$"; suf <- sc$letter
-  }
-  p <- plotly::plot_ly()
-  all_y <- numeric(0)
-  for (lb in names(series)) {
-    s <- series[[lb]]
-    all_y <- c(all_y, s$y[is.finite(s$y)])
-    p <- plotly::add_trace(p, x = s$x, y = round(s$y, 2), name = lb,
-                           type = "scatter", mode = "lines",
-                           line = list(color = cols[[lb]], width = 2),
-                           hovertemplate = paste0(pre, "%{y}", suf))
-  }
-  yaxis <- list(title = NA, zeroline = FALSE)
-  if (row$units[1] %in% c("pct", "x")) {
-    shp <- threshold_layers(row, peer)
-    if (length(shp) > 0) p <- plotly::layout(p, shapes = shp)
-    yr <- yrange_with_refs(all_y, row, peer)
-    if (!is.null(yr)) yaxis$range <- yr
-  }
-  plotly::layout(
-    p, font = PLT_FONT, showlegend = FALSE, hovermode = "x unified",
-    xaxis = list(title = NA, showgrid = FALSE),
-    yaxis = yaxis,
-    margin = list(t = 6, b = 24, l = 36, r = 8)
-  ) |>
-    plotly::config(displayModeBar = FALSE)
-}
-
 # Where the bank sits among all ~4,300 FDIC banks: log-binned histogram of
 # total assets with one labeled marker per selected bank. The app version
 # of the deep dive's scale chart; dollars cannot be the yardstick, so the

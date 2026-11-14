@@ -69,3 +69,12 @@
                             animation: bootslide 1.4s ease-in-out infinite; }
 #boot_overlay .msg { margin-top: 14px; font-size: 17px; color: #1F2933; }
 @keyframes bootslide { from { left: -35%; } to { left: 100%; } }
+
+/* ---- Overview statements ------------------------------------------------ */
+.fs-table { font-size: .9rem; font-variant-numeric: tabular-nums; }
+.fs-table th { font-weight: 600; font-size: .78rem; color: #5B6670; }
+.fs-table .fs-head td { font-weight: 600; text-transform: uppercase;
+                        font-size: .75rem; letter-spacing: .04em;
+                        color: #5B6670; padding-top: .75rem; border-bottom: 0; }
+.fs-table .fs-total td { font-weight: 600; border-top: 1px solid #ADB5BD; }
+.fs-table .fs-tab { color: #5B6670; font-size: .8rem; white-space: nowrap; }
