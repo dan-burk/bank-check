@@ -1,7 +1,7 @@
 # Balance sheet and income statement for the Overview, built from FDIC's
 # own call report lines ($ thousands). "Other" rows are the remainder, so
 # each block adds up exactly to FDIC's reported total. `tab` names the page
-# that explains the line (kept for a later link; not shown for now).
+# that explains the line and links to it.
 
 # One quarter's lines. kind: "head" (section title), "line", "total".
 statement_lines <- function(r) {
@@ -105,7 +105,7 @@ statement_table <- function(banks, section, unit = "usd", cmp = "qoq",
   # it when it is zero for every bank shown
   zero_other <- lines$label == "Other" & lines$section == "is" &
     apply(usd, 1, function(v) all(is.na(v) | abs(v) < 0.5))
-  n_cols <- 1 + ncol(vals) + !is.null(chg)
+  n_cols <- 2 + ncol(vals) + !is.null(chg)
   rows <- lapply(which(!zero_other), function(i) {
     if (lines$kind[i] == "head") {
       return(tags$tr(class = "fs-head", tags$td(colspan = n_cols, lines$label[i])))
@@ -117,7 +117,13 @@ statement_table <- function(banks, section, unit = "usd", cmp = "qoq",
             }),
             if (!is.null(chg)) {
               tags$td(class = "text-end text-muted", num(chg[i], sign = TRUE))
-            })
+            },
+            # Jumps to the tab that explains the line (handler in app.js)
+            tags$td(class = "fs-tab",
+                    if (nzchar(lines$tab[i])) {
+                      tags$a(href = "#", class = "fs-tab-link",
+                             `data-tab` = lines$tab[i], lines$tab[i])
+                    }))
   })
 
   bank_heads <- if (single) {
@@ -138,7 +144,7 @@ statement_table <- function(banks, section, unit = "usd", cmp = "qoq",
   }
   tags$table(
     class = "table table-sm fs-table mb-0",
-    tags$thead(tags$tr(tags$th(""), bank_heads)),
+    tags$thead(tags$tr(tags$th(""), bank_heads, tags$th(""))),
     tags$tbody(rows)
   )
 }

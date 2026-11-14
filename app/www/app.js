@@ -79,3 +79,19 @@
     if (e.name === 'overview_grid') setTimeout(apply, 0);
   });
 })();
+
+// Statement links ("Asset Quality", "Liquidity & Funding", ...): open that
+// top-level tab by clicking its navbar link (bslib tags each one with
+// data-value = the tab title), then scroll to the top of the page.
+$(document).on('click', '.fs-tab-link', function(e) {
+  e.preventDefault();
+  var tab = this.getAttribute('data-tab');
+  var links = document.querySelectorAll('.navbar .nav-link[data-value]');
+  for (var i = 0; i < links.length; i++) {
+    if (links[i].getAttribute('data-value') === tab) {
+      links[i].click();
+      window.scrollTo(0, 0);
+      return;
+    }
+  }
+});
