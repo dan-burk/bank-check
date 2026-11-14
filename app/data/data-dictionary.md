@@ -6,7 +6,7 @@ Living document. Every field used in `analysis/` scripts is defined here before 
 
 - **Dollar fields are $thousands.** `ASSET = 4867664` means $4.87B.
 - **Unsuffixed ratio fields are year-to-date, annualized** (`ROA`, `NIMY`, `ELNATRY`, `NTLNLSR`). The `Q`-suffixed twins (`ROAQ`, `NIMYQ`, `ELNATRYQ`, `NTLNLSQR`) are single-quarter, annualized. Use Q variants for turning-point detection; YTD variants smooth within a calendar year and reset every January.
-- **Income flows (`NETINC`, `INTINC`, `ELNATR`, `NTLNLS`, ...) are YTD**, not quarterly. To get a single quarter, difference consecutive quarters within the same year.
+- **Income flows (`NETINC`, `INTINC`, `ELNATR`, `NTLNLS`, ...) are YTD**, not quarterly. For a single quarter use FDIC's `Q`-suffixed field where one exists (`NTLNLSQ`, `ELNATQ`, `NETINCQ`). Differencing consecutive YTD values is a last resort: it goes wrong where a bank restated or filed semiannually (1985).
 - `RISDATE` = `REPDTE` (aliases). Integer `YYYYMMDD`.
 - Join key everywhere is `CERT`.
 - A `0` is not always a zero. Small banks with no foreign offices report some fields as 0 rather than missing; pre-1990s quarters return NULL for fields that did not exist yet (e.g. `RBC1AAJ` pre-Basel, `DEPUNINS` early years).
