@@ -17,7 +17,7 @@ statement_lines <- function(r) {
   bs <- rbind(
     ln("bs", "Assets", NA, "head"),
     ln("bs", "Loans", r$LNLSGR, tab = "Asset Quality"),
-    ln("bs", "− Loss cushion", -r$LNATRES, tab = "Asset Quality"),
+    ln("bs", "− Allowance*", -r$LNATRES, tab = "Asset Quality"),
     ln("bs", "Bonds", r$SC, tab = "Sensitivity"),
     ln("bs", "Cash", r$CHBAL, tab = "Liquidity & Funding"),
     ln("bs", "Other", r$ASSET - loans_net - z(r$SC) - z(r$CHBAL)),

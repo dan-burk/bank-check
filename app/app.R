@@ -570,8 +570,7 @@ server <- function(input, output, session) {
               radioButtons("fs_unit", NULL, inline = TRUE,
                            choices = c("$" = "usd", "%" = "pct")),
               radioButtons("fs_cmp", NULL, inline = TRUE,
-                           choices = c("vs last quarter" = "qoq",
-                                       "vs 1 year ago" = "yoy")))),
+                           choices = c("QoQ" = "qoq", "YoY" = "yoy")))),
         layout_columns(
           col_widths = breakpoints(xs = 12, lg = c(6, 6)),
           div(tags$h6("Balance sheet"), uiOutput("bs_table")),
@@ -584,7 +583,11 @@ server <- function(input, output, session) {
     cmp  <- if (is.null(input$fs_cmp)) "qoq" else input$fs_cmp
     tagList(
       if (unit == "pct") div(class = "text-muted small mb-1", basis),
-      statement_table(cur(), section, unit, cmp)
+      statement_table(cur(), section, unit, cmp),
+      if (section == "bs") {
+        div(class = "text-muted small mt-2",
+            star_line("Allowance: money set aside for expected loan losses"))
+      }
     )
   })
   output$bs_table <- statement_ui("bs", "% of total assets")
