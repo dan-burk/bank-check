@@ -22,6 +22,8 @@ PEER <- peer_stats(XS, FIELDS_META)
 # literal: the cross-section refreshes itself, so a hardcoded label goes
 # stale silently while every chart keeps citing it.
 XS_LABEL <- xs_quarter_label(XS)
+# The same quarter anchors the Industry tab's totals
+XS_RD <- max(as.integer(as.character(XS$RISDATE)), na.rm = TRUE)
 rm(XS)
 
 # All post-2000 failures (built by app/build/build_fail_panel.R)
@@ -242,6 +244,25 @@ ui <- page_navbar(
     "Overview",
     uiOutput("kpis"),
     uiOutput("overview_grid")
+  ),
+
+  nav_panel(
+    "Industry",
+    card(
+      card_header(
+        class = "d-flex flex-wrap justify-content-between align-items-center gap-2",
+        "Financial Statements",
+        div(class = "d-flex flex-wrap column-gap-4",
+            radioButtons("ind_unit", NULL, inline = TRUE,
+                         choices = c("$" = "usd", "%" = "pct")),
+            radioButtons("ind_cmp", NULL, inline = TRUE,
+                         choices = c("QoQ" = "qoq", "YoY" = "yoy")))),
+      uiOutput("ind_caption"),
+      layout_columns(
+        col_widths = breakpoints(xs = 12, lg = c(6, 6)),
+        div(tags$h6("Balance sheet"), uiOutput("ind_bs_table")),
+        div(tags$h6("Income statement"), uiOutput("ind_is_table")))
+    )
   ),
 
   nav_panel("Capital", ui_explorer("cap", EXPLORERS$cap$groups, EXPLORERS$cap$default)),
@@ -578,23 +599,53 @@ server <- function(input, output, session) {
       )
     )
   })
-  statement_ui <- function(section, basis) renderUI({
-    unit <- if (is.null(input$fs_unit)) "usd" else input$fs_unit
-    cmp  <- if (is.null(input$fs_cmp)) "qoq" else input$fs_cmp
-    tagList(
-      if (unit == "pct") div(class = "text-muted small mb-1", basis),
-      statement_table(sel_banks(), section, unit, cmp, sel_cols()),
-      if (section == "bs") {
-        div(class = "text-muted small mt-2",
-            star_line("Allowance: money set aside for expected loan losses"))
-      }
-    )
-  })
-  output$bs_table <- statement_ui("bs", "% of total assets")
-  output$is_table <- statement_ui("is", "% of revenue")
+  # One statement table (bank or industry) with its $/% and QoQ/YoY inputs
+  statement_ui <- function(section, data, unit_id, cmp_id,
+                           cols = function() NULL, links = TRUE) {
+    renderUI({
+      unit <- if (is.null(input[[unit_id]])) "usd" else input[[unit_id]]
+      cmp  <- if (is.null(input[[cmp_id]])) "qoq" else input[[cmp_id]]
+      basis <- if (section == "bs") "% of total assets" else "% of revenue"
+      tagList(
+        if (unit == "pct") div(class = "text-muted small mb-1", basis),
+        statement_table(data(), section, unit, cmp, cols(), links = links),
+        if (section == "bs") {
+          div(class = "text-muted small mt-2",
+              star_line("Allowance: money set aside for expected loan losses"))
+        }
+      )
+    })
+  }
+  output$bs_table <- statement_ui("bs", sel_banks, "fs_unit", "fs_cmp", sel_cols)
+  output$is_table <- statement_ui("is", sel_banks, "fs_unit", "fs_cmp", sel_cols)
   # Comparing banks drops the change column, so QoQ/YoY greys out (app.js)
   observe(session$sendCustomMessage("fs_cmp_enabled",
                                     list(on = length(sel_certs()) <= 1)))
+
+  # Industry: every FDIC-insured bank combined ----
+  # Fetched only when the Industry tab is first viewed (hidden outputs don't
+  # render), for the peer-band quarter plus the two it is compared against
+  industry <- reactive({
+    rds <- c(XS_RD, prev_quarter_end(XS_RD), XS_RD - 10000L)
+    if (!all(vapply(rds, function(rd) cache_fresh(industry_cache(rd)), logical(1)))) {
+      session$sendCustomMessage("fetch_overlay", list(show = TRUE))
+      on.exit(session$sendCustomMessage("fetch_overlay", list(show = FALSE)))
+    }
+    rows <- lapply(rds, fetch_industry_cached)
+    validate(need(!is.null(rows[[1]]),
+                  "FDIC data is unavailable right now. Try again in a moment."))
+    dplyr::bind_rows(rows)
+  })
+  output$ind_caption <- renderUI({
+    now <- industry()[1, ]
+    div(class = "text-muted small mb-2",
+        paste0("All ", format(now$n_banks, big.mark = ","),
+               " FDIC-insured banks combined, ", quarter_name(now$RISDATE), "."))
+  })
+  output$ind_bs_table <- statement_ui("bs", industry, "ind_unit", "ind_cmp",
+                                      links = FALSE)
+  output$ind_is_table <- statement_ui("is", industry, "ind_unit", "ind_cmp",
+                                      links = FALSE)
 
   # Scoped explorers, one per category page ----
   for (id in names(EXPLORERS)) local({

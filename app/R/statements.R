@@ -57,8 +57,9 @@ quarter_name <- function(risdate) {
 # of them (names = labels, cols = colors keyed by label). unit "usd" or
 # "pct"; cmp "qoq" (vs prior quarter) or "yoy" (vs same quarter last year).
 # One bank gets a change column; two or more get a column each instead.
+# links = FALSE drops the column that links each line to its tab.
 statement_table <- function(banks, section, unit = "usd", cmp = "qoq",
-                            cols = NULL) {
+                            cols = NULL, links = TRUE) {
   if (is.data.frame(banks)) banks <- list(banks)
   single <- length(banks) == 1
   latest <- function(df) df[order(df$RISDATE), ][nrow(df), ]
@@ -105,7 +106,7 @@ statement_table <- function(banks, section, unit = "usd", cmp = "qoq",
   # it when it is zero for every bank shown
   zero_other <- lines$label == "Other" & lines$section == "is" &
     apply(usd, 1, function(v) all(is.na(v) | abs(v) < 0.5))
-  n_cols <- 2 + ncol(vals) + !is.null(chg)
+  n_cols <- 1 + ncol(vals) + !is.null(chg) + links
   rows <- lapply(which(!zero_other), function(i) {
     if (lines$kind[i] == "head") {
       return(tags$tr(class = "fs-head", tags$td(colspan = n_cols, lines$label[i])))
@@ -119,7 +120,7 @@ statement_table <- function(banks, section, unit = "usd", cmp = "qoq",
               tags$td(class = "text-end text-muted", num(chg[i], sign = TRUE))
             },
             # Jumps to the tab that explains the line (handler in app.js)
-            tags$td(class = "fs-tab",
+            if (links) tags$td(class = "fs-tab",
                     if (nzchar(lines$tab[i])) {
                       tags$a(href = "#", class = "fs-tab-link",
                              `data-tab` = lines$tab[i], lines$tab[i])
@@ -144,7 +145,51 @@ statement_table <- function(banks, section, unit = "usd", cmp = "qoq",
   }
   tags$table(
     class = "table table-sm fs-table mb-0",
-    tags$thead(tags$tr(tags$th(""), bank_heads, tags$th(""))),
+    tags$thead(tags$tr(tags$th(""), bank_heads, if (links) tags$th(""))),
     tags$tbody(rows)
   )
+}
+
+# ---- Industry: every FDIC-insured bank combined ---------------------------
+
+# Only the lines the statements use, so an all-bank pull stays small
+STATEMENT_FIELDS <- paste0(
+  "CERT,RISDATE,ASSET,LIAB,EQTOT,DEP,LNLSGR,LNATRES,SC,CHBAL,",
+  "OTHBOR,FREPP,SUBND,NIMQ,NONIIQ,NONIXQ,ELNATQ,IGLSECQ,ITAXQ,NETINCQ"
+)
+
+# One quarter's cross-section summed into a single "bank" row, so the
+# statement code works on it unchanged
+industry_totals <- function(xs) {
+  f <- setdiff(strsplit(STATEMENT_FIELDS, ",")[[1]], c("CERT", "RISDATE"))
+  row <- as.data.frame(lapply(xs[f], function(v) sum(as.numeric(v), na.rm = TRUE)))
+  row$RISDATE <- as.character(xs$RISDATE[1])
+  row$n_banks <- nrow(xs)
+  row
+}
+
+industry_cache <- function(rd) file.path(CACHE_DIR, paste0("industry_", rd, ".rds"))
+
+cache_fresh <- function(path, max_age_days = 30) {
+  file.exists(path) &&
+    difftime(Sys.time(), file.mtime(path), units = "days") < max_age_days
+}
+
+# Industry totals for one quarter: fresh cache, else live, else stale
+# cache, else NULL. The cache is one row, not the whole cross-section.
+fetch_industry_cached <- function(rd) {
+  cache <- industry_cache(rd)
+  if (cache_fresh(cache)) return(readRDS(cache))
+  tot <- tryCatch({
+    xs <- fetch_all_banks_quarter(rd, fields = STATEMENT_FIELDS)
+    if (is.null(xs)) NULL else industry_totals(xs)
+  }, error = function(e) {
+    message("Industry totals unavailable for ", rd, ": ", conditionMessage(e))
+    NULL
+  })
+  if (!is.null(tot)) {
+    saveRDS(tot, cache)
+    return(tot)
+  }
+  if (file.exists(cache)) readRDS(cache) else NULL
 }

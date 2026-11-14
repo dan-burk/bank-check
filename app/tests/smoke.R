@@ -96,6 +96,14 @@ stopifnot(grepl("Dacotah (SD)", two_html, fixed = TRUE),
           !grepl("vs Q", two_html, fixed = TRUE))   # no change column
 cat("ok: statements add up and render in all modes, 1 or 2 banks\n")
 
+# Industry totals: a summed cross-section is just another "bank" row
+mini_xs <- dplyr::bind_rows(lapply(banks, function(d) d[which.max(d$RISDATE), ]))
+tot <- industry_totals(mini_xs)
+stopifnot(tot$n_banks == 2, abs(tot$ASSET - sum(mini_xs$ASSET)) < 1e-6,
+          abs(tot$NETINCQ - sum(mini_xs$NETINCQ)) < 1e-6,
+          inherits(statement_table(tot, "is", "pct", links = FALSE), "shiny.tag"))
+cat("ok: industry totals sum the banks and render\n")
+
 sel <- data.frame(
   label = names(banks),
   asset = sapply(banks, function(d) utils::tail(d$ASSET[!is.na(d$ASSET)], 1)),
@@ -189,6 +197,7 @@ shiny::testServer(app = "app", {
     earn_metric = "ROA", liq_metric = "LNLSDEPR"
   )
   outs <- c("kpis", "scale_plot", "overview_grid", "bs_table", "is_table",
+            "ind_caption", "ind_bs_table", "ind_is_table",
             "cap_plot", "cap_caveat", "cap_chip",
             "aq_plot", "earn_plot", "liq_plot",
             "pipeline_plot", "rc_plot", "prov_plot", "mix_plot",
