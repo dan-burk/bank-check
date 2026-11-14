@@ -77,7 +77,6 @@
                         font-size: .75rem; letter-spacing: .04em;
                         color: #5B6670; padding-top: .75rem; border-bottom: 0; }
 .fs-table .fs-total td { font-weight: 600; border-top: 1px solid #ADB5BD; }
-.fs-table .fs-tab { color: #5B6670; font-size: .8rem; white-space: nowrap; }
 .fs-table .fs-bank { font-weight: 600; max-width: 9rem; margin-left: auto;
                      overflow: hidden; text-overflow: ellipsis;
                      white-space: nowrap; }

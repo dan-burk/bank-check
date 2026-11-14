@@ -565,7 +565,7 @@ server <- function(input, output, session) {
       card(
         card_header(
           class = "d-flex flex-wrap justify-content-between align-items-center gap-2",
-          "Balance Sheet & Income",
+          "Financial Statements",
           div(class = "d-flex flex-wrap column-gap-4",
               radioButtons("fs_unit", NULL, inline = TRUE,
                            choices = c("$" = "usd", "%" = "pct")),
