@@ -152,7 +152,8 @@ statement_table <- function(banks, section, unit = "usd", cmp = "qoq",
 
 # ---- Industry: every FDIC-insured bank combined ---------------------------
 
-# Only the lines the statements use, so an all-bank pull stays small
+# The lines the statements use. The pipeline sums these per quarter into
+# the industry_quarterly mart (pipeline/build.R), which the Industry tab reads.
 STATEMENT_FIELDS <- paste0(
   "CERT,RISDATE,ASSET,LIAB,EQTOT,DEP,LNLSGR,LNATRES,SC,CHBAL,",
   "OTHBOR,FREPP,SUBND,NIMQ,NONIIQ,NONIXQ,ELNATQ,IGLSECQ,ITAXQ,NETINCQ"
@@ -166,30 +167,4 @@ industry_totals <- function(xs) {
   row$RISDATE <- as.character(xs$RISDATE[1])
   row$n_banks <- nrow(xs)
   row
-}
-
-industry_cache <- function(rd) file.path(CACHE_DIR, paste0("industry_", rd, ".rds"))
-
-cache_fresh <- function(path, max_age_days = 30) {
-  file.exists(path) &&
-    difftime(Sys.time(), file.mtime(path), units = "days") < max_age_days
-}
-
-# Industry totals for one quarter: fresh cache, else live, else stale
-# cache, else NULL. The cache is one row, not the whole cross-section.
-fetch_industry_cached <- function(rd) {
-  cache <- industry_cache(rd)
-  if (cache_fresh(cache)) return(readRDS(cache))
-  tot <- tryCatch({
-    xs <- fetch_all_banks_quarter(rd, fields = STATEMENT_FIELDS)
-    if (is.null(xs)) NULL else industry_totals(xs)
-  }, error = function(e) {
-    message("Industry totals unavailable for ", rd, ": ", conditionMessage(e))
-    NULL
-  })
-  if (!is.null(tot)) {
-    saveRDS(tot, cache)
-    return(tot)
-  }
-  if (file.exists(cache)) readRDS(cache) else NULL
 }

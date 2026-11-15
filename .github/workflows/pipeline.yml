@@ -1,0 +1,107 @@
+# Nightly data pipeline (pipeline/README.md). Pulls the last 10 quarters
+# for every bank from the FDIC API, logs any revisions against the stored
+# raw files, rebuilds the marts, tests them, and publishes:
+#   data-raw   release: one parquet per quarter + revisions.csv
+#   data-marts release: the marts the app reads
+# If the marts changed, it starts "Test and deploy" so both sites pick
+# them up. Most nights nothing changed and nothing deploys.
+#
+# Any failure (FDIC API down, a mart check or test trips) stops the job
+# before anything is uploaded, so the last good data stays live and GitHub
+# emails the repo owner. Run it by hand from the Actions tab.
+name: Data pipeline
+
+on:
+  schedule:
+    - cron: "0 8 * * *"   # 08:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: write   # upload release assets
+  actions: write    # start the deploy workflow
+
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+env:
+  PKG_REPO: "https://packagemanager.posit.co/cran/__linux__/noble/2026-07-15"
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "4.5.1"
+
+      # Same key as the deploy workflow's test job, so it reuses that cache
+      - name: Cache R packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.R_LIBS_USER }}
+          key: rlib-test-noble-r451-snap20260715-${{ hashFiles('DESCRIPTION') }}
+
+      - name: Install pinned packages
+        run: |
+          Rscript -e '
+            options(timeout = 300, warn = 1)
+            pkgs <- trimws(strsplit(read.dcf("DESCRIPTION")[, "Imports"], ",")[[1]])
+            install.packages(pkgs, repos = Sys.getenv("PKG_REPO"))
+          '
+
+      # The stored raw files are what the change check compares against,
+      # and revisions.csv is appended to, so a failed download must stop
+      # the run (a silent "first pull" would wipe the revision history).
+      # An empty release is fine: that is the very first run.
+      - name: Download stored raw data and current marts
+        run: |
+          mkdir -p pipeline/out/raw prev-marts
+          n=$(gh release view data-raw --json assets --jq '.assets | length')
+          if [ "$n" -gt 0 ]; then
+            gh release download data-raw --dir pipeline/out/raw --pattern 'risdate.*.parquet'
+            gh release download data-raw --dir pipeline/out --pattern 'revisions.csv' || \
+              echo "No revisions log yet"
+          fi
+          n=$(gh release view data-marts --json assets --jq '.assets | length')
+          if [ "$n" -gt 0 ]; then
+            gh release download data-marts --dir prev-marts
+          fi
+
+      - name: Build raw and marts
+        run: Rscript pipeline/build.R
+
+      # Same tests the deploy runs, against the new marts. The integrity
+      # test's live phase is skipped: the pipeline makes no extra API calls.
+      - name: Test the new marts
+        env:
+          INTEGRITY_SKIP_LIVE: "1"
+        run: |
+          cp pipeline/out/marts/*.parquet app/data/
+          Rscript app/tests/smoke.R
+          Rscript app/tests/integrity.R
+
+      - name: Upload raw data
+        run: |
+          files=(pipeline/out/raw/risdate.*.parquet pipeline/out/raw/manifest.csv)
+          [ -f pipeline/out/revisions.csv ] && files+=(pipeline/out/revisions.csv)
+          gh release upload data-raw "${files[@]}" --clobber
+
+      - name: Publish marts and deploy if they changed
+        run: |
+          changed=0
+          for f in pipeline/out/marts/*.parquet; do
+            if ! cmp -s "$f" "prev-marts/$(basename "$f")"; then
+              echo "Changed: $(basename "$f")"
+              changed=1
+            fi
+          done
+          if [ "$changed" -eq 0 ]; then
+            echo "Marts unchanged; nothing to deploy."
+            exit 0
+          fi
+          gh release upload data-marts pipeline/out/marts/*.parquet --clobber
+          gh workflow run deploy.yml --ref main

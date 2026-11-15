@@ -6,13 +6,13 @@
 # plotly traces. Run from the repo root:
 #   Rscript.exe app/tests/integrity.R
 #
-# Roster: 3 small + 2 medium + 3 large banks sampled from the shipped
+# Roster: 3 small + 2 medium + 3 large banks sampled from the latest_snapshot
 # cross-section (INTEGRITY_SEED env var, default 20260716, makes any run
 # reproducible), plus two pinned oddballs: CERT 35164 (Capital Bank and
 # Trust — $500k deposits on $226M assets, zero loans ever; the bank that
 # exposed the Funding Mix mislabel) and one auto-screened extreme case.
 #
-# Phase 1 runs offline against the shipped cross-section. Phase 2 fetches
+# Phase 1 runs offline against the latest_snapshot mart. Phase 2 fetches
 # each roster bank's full history from the live FDIC API (cached in
 # data-cache/, so reruns are offline-fast) and self-skips when the API is
 # unreachable or INTEGRITY_SKIP_LIVE=1.
@@ -173,12 +173,11 @@ usd_div <- function(vals) {
 
 # ---- roster: 3 small + 2 medium + 3 large + 2 weird ------------------------
 
-inst   <- fetch_institutions_cached()
-xs_path <- newest_xs("data")
-stopifnot(!is.null(xs_path))
-XS_RISDATE <- as.integer(sub("^.*xs_([0-9]{8})\\.rds$", "\\1", xs_path))
-xs_raw <- readRDS(xs_path)
+snap   <- load_snapshot()
+inst   <- snapshot_institutions(snap)
+xs_raw <- snap[!is.na(snap$RISDATE), ]
 xs_raw$CERT <- as.integer(xs_raw$CERT)
+XS_RISDATE <- as.integer(xs_raw$RISDATE[1])
 
 # FDIC identity: gross loans = net loans + allowance, wherever all three
 # are reported. A break means one of the app's loan denominators is off.

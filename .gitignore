@@ -1,2 +1,5 @@
 app/data-cache/
 _site/
+pipeline/out/
+# Marts from the nightly pipeline, downloaded at deploy (pipeline/README.md)
+app/data/*.parquet

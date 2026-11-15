@@ -14,9 +14,13 @@ library(dplyr)
 
 # helpers in app/R/ are auto-sourced by shiny (data.R, plots.R, theme.R)
 
-INSTITUTIONS <- fetch_institutions_cached()
+# Multi-bank data comes from the nightly pipeline's marts in data/
+# (pipeline/README.md); only single-bank histories are fetched live.
+SNAPSHOT <- load_snapshot()
+INSTITUTIONS <- snapshot_institutions(SNAPSHOT)
 INST_CHOICES <- institution_choices(INSTITUTIONS)
-XS <- fetch_cross_section_cached()
+XS <- snapshot_cross_section(SNAPSHOT)
+rm(SNAPSHOT)
 PEER <- peer_stats(XS, FIELDS_META)
 # Legends name the quarter the peer data actually came from, never a
 # literal: the cross-section refreshes itself, so a hardcoded label goes
@@ -25,6 +29,7 @@ XS_LABEL <- xs_quarter_label(XS)
 # The same quarter anchors the Industry tab's totals
 XS_RD <- max(as.integer(as.character(XS$RISDATE)), na.rm = TRUE)
 rm(XS)
+INDUSTRY <- load_industry()
 
 # All post-2000 failures (built by app/build/build_fail_panel.R)
 FAIL_PANEL <- load_fail_panel()
@@ -623,18 +628,14 @@ server <- function(input, output, session) {
                                     list(on = length(sel_certs()) <= 1)))
 
   # Industry: every FDIC-insured bank combined ----
-  # Fetched only when the Industry tab is first viewed (hidden outputs don't
-  # render), for the peer-band quarter plus the two it is compared against
+  # The peer-band quarter plus the two it is compared against, from the
+  # industry_quarterly mart (no fetch)
   industry <- reactive({
     rds <- c(XS_RD, prev_quarter_end(XS_RD), XS_RD - 10000L)
-    if (!all(vapply(rds, function(rd) cache_fresh(industry_cache(rd)), logical(1)))) {
-      session$sendCustomMessage("fetch_overlay", list(show = TRUE))
-      on.exit(session$sendCustomMessage("fetch_overlay", list(show = FALSE)))
-    }
-    rows <- lapply(rds, fetch_industry_cached)
-    validate(need(!is.null(rows[[1]]),
-                  "FDIC data is unavailable right now. Try again in a moment."))
-    dplyr::bind_rows(rows)
+    rows <- INDUSTRY[INDUSTRY$RISDATE %in% rds, ]
+    validate(need(XS_RD %in% rows$RISDATE,
+                  "Industry totals are missing for the latest quarter."))
+    rows[order(-rows$RISDATE), ]
   })
   output$ind_caption <- renderUI({
     now <- industry()[1, ]

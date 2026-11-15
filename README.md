@@ -67,24 +67,23 @@ API is unreachable. Two optional env vars:
 
 ## Data
 
-Everything comes from `api.fdic.gov` (CORS-open, no auth) at runtime. The
-app is not pinned to a quarter: it discovers the newest sufficiently
-complete one itself, so a new FDIC filing period shows up with no code
-change and no redeploy.
+Everything comes from `api.fdic.gov` (CORS-open, no auth). See
+`pipeline/README.md` for the full pipeline.
 
-- **Live, per session** — the all-bank cross-section behind the peer
-  percentile bands, the institution directory behind the pickers, and a
-  bank's full quarterly history when you pick it. Each is cached for 30
-  days in `app/data-cache/` (in the browser build that cache is webR's
-  in-memory filesystem, so it lasts one session).
+- **Nightly marts** — a GitHub Action pulls the last 10 quarters for every
+  bank, logs any FDIC revisions, and builds `latest_snapshot` (peer bands
+  and the bank picker) and `industry_quarterly` (Industry tab). They live in
+  the `data-marts` GitHub Release; each deploy downloads them into
+  `app/data/`, so both sites carry their own copy. To run the app locally,
+  download them first:
+  `gh release download data-marts --dir app/data --clobber`
+- **Live, per bank** — a bank's full quarterly history is fetched from the
+  API when you pick it, cached for 30 days in `app/data-cache/` (in the
+  browser build that cache lasts one session).
 - **Which quarter** — the newest quarter is accepted only once at least
   95% as many banks have filed as in the quarter before it. Quarters open
   on the API as a trickle of early filers, and a half-filled cross-section
   would make every peer median quietly wrong rather than obviously absent.
-- **Offline fallback** — `app/data/` ships a snapshot of the cross-section
-  and the directory, used only when the API is unreachable, and by the CI
-  smoke test so the deploy gate needs no network. Refresh it occasionally
-  with `Rscript.exe app/build/sync_assets.R` and commit what changes.
 - **Not live** — pre-failure histories for all post-2000 failures ship in
   `app/data/` and refresh only when you run
   `app/build/build_fail_panel.R`. Failures are rare (6 across 2025-2026),

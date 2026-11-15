@@ -1,12 +1,13 @@
-# Monthly data refresh. Rebuilds the shipped data in app/data/ (failures
-# panel, cross-section, institution directory), checks it with the
-# integrity test, commits any change, then starts the normal
-# "Test and deploy" workflow so both sites pick it up.
+# Monthly failures-panel refresh. Rebuilds app/data/fail_panel.rds and
+# failures_meta.rds (pre-failure histories for every post-2000 failure),
+# checks them with the integrity test, commits any change, then starts the
+# normal "Test and deploy" workflow so both sites pick it up. The other
+# multi-bank data comes from the nightly pipeline (pipeline.yml).
 #
 # Any failure (FDIC API down, integrity check trips) stops the job before
 # the commit, so the last good data stays live and GitHub emails the
 # repo owner. Run it by hand from the Actions tab via "Run workflow".
-name: Refresh data
+name: Refresh failures panel
 
 on:
   schedule:
@@ -48,8 +49,11 @@ jobs:
       - name: Rebuild failures panel
         run: Rscript app/build/build_fail_panel.R
 
-      - name: Refresh cross-section and institution directory
-        run: Rscript app/build/sync_assets.R
+      # The integrity test samples its roster from the latest_snapshot mart
+      - name: Download marts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download data-marts --dir app/data --clobber
 
       - name: Integrity check on the fresh data
         run: Rscript app/tests/integrity.R

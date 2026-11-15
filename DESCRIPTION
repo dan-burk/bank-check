@@ -17,4 +17,5 @@ Imports:
     DT,
     commonmark,
     jsonlite,
-    htmltools
+    htmltools,
+    nanoparquet

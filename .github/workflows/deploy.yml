@@ -66,9 +66,15 @@ jobs:
             install.packages(pkgs, repos = Sys.getenv("PKG_REPO"))
           '
 
-      # Fetches live where it can, but every fetch falls back to the
-      # shipped .rds copies in app/data/, so FDIC API downtime cannot
-      # flake the gate
+      # The nightly pipeline's marts (pipeline/README.md). Not in git, so
+      # every job that runs or ships the app downloads them first.
+      - name: Download marts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download data-marts --dir app/data --clobber
+
+      # Reads only the marts and a fixture, never the FDIC API, so API
+      # downtime cannot flake the gate
       - name: Run smoke test
         run: Rscript app/tests/smoke.R
 
@@ -102,6 +108,13 @@ jobs:
             pkgs <- trimws(strsplit(read.dcf("DESCRIPTION")[, "Imports"], ",")[[1]])
             install.packages(c(pkgs, "rsconnect"), repos = Sys.getenv("PKG_REPO"))
           '
+
+      # Shipped inside the shinyapps.io bundle: the server reads its own
+      # copy from disk and never depends on Pages or GitHub at runtime
+      - name: Download marts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download data-marts --dir app/data --clobber
 
       - name: Deploy
         env:
@@ -138,6 +151,12 @@ jobs:
 
       - name: Install shinylive
         run: Rscript -e 'options(timeout = 300, warn = 1); install.packages("shinylive", repos = Sys.getenv("PKG_REPO"))'
+
+      # Bundled into app.json with the rest of app/
+      - name: Download marts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download data-marts --dir app/data --clobber
 
       - name: Export app to static site
         run: Rscript -e 'shinylive::export("app", "_site", template_params = list(title = "Bank Check"))'

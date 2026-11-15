@@ -1,8 +1,8 @@
 # Smoke test for the app: every plot builder returns a plotly object and
 # every server output renders. Run from the repo root:
 #   Rscript.exe app/tests/smoke.R
-# First run fetches the cross-section from the FDIC API (one request);
-# after that everything reads from app/data-cache/.
+# Needs the pipeline marts in app/data/ (see pipeline/README.md); runs
+# without network to FDIC.
 
 library(shiny)
 library(bslib)
@@ -19,8 +19,15 @@ source("R/statements.R")
 # Two-bank fixture (Dacotah 1984+, First B&T) in raw API columns, so the
 # test exercises derive() just as a live fetch would
 BASE <- readRDS("tests/fixtures/sd_banks.rds") |> derive()
-inst <- fetch_institutions_cached()
-PEER <- peer_stats(fetch_cross_section_cached(), FIELDS_META)
+snap <- load_snapshot()
+inst <- snapshot_institutions(snap)
+PEER <- peer_stats(snapshot_cross_section(snap), FIELDS_META)
+stopifnot(nrow(inst) > 3000, !anyNA(inst$NAME))
+ind <- load_industry()
+stopifnot(nrow(ind) >= 5, !is.unsorted(rev(ind$RISDATE)),
+          ind$RISDATE[1] == max(snap$RISDATE, na.rm = TRUE))
+cat("marts: snapshot", nrow(snap), "banks,", nrow(inst), "active; industry",
+    nrow(ind), "quarters\n")
 stopifnot(nrow(PEER) >= 15, all(c("p25", "p50", "p75") %in% names(PEER)))
 cat("peer stats:", nrow(PEER), "metrics\n")
 
@@ -225,7 +232,7 @@ shiny::testServer(app = "app", {
 
   # Directory modal: table renders with one row per active bank, and a
   # row pick runs without error (inst here is the same INSTITUTIONS the
-  # app loads: both come from fetch_institutions_cached)
+  # app loads: both come from snapshot_institutions)
   dir_payload <- jsonlite::fromJSON(output$dir_table)
   stopifnot(nrow(dir_payload$x$data) == nrow(inst))
   session$setInputs(browse_all = 1, dir_table_rows_selected = 2L)
