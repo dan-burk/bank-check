@@ -67,11 +67,24 @@ jobs:
           '
 
       # The nightly pipeline's marts (pipeline/README.md). Not in git, so
-      # every job that runs or ships the app downloads them first.
+      # they are downloaded once here, one file per call so a missing mart
+      # fails the job, and handed to the deploy jobs as an artifact: every
+      # job tests or ships the same copy, even if the pipeline is mid-upload.
       - name: Download marts
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download data-marts --dir app/data --clobber
+        run: |
+          gh release download data-marts --dir app/data --clobber --pattern 'latest_snapshot.parquet'
+          gh release download data-marts --dir app/data --clobber --pattern 'industry_quarterly.parquet'
+
+      - name: Upload marts artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: marts
+          path: |
+            app/data/latest_snapshot.parquet
+            app/data/industry_quarterly.parquet
+          if-no-files-found: error
 
       # Reads only the marts and a fixture, never the FDIC API, so API
       # downtime cannot flake the gate
@@ -112,9 +125,10 @@ jobs:
       # Shipped inside the shinyapps.io bundle: the server reads its own
       # copy from disk and never depends on Pages or GitHub at runtime
       - name: Download marts
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release download data-marts --dir app/data --clobber
+        uses: actions/download-artifact@v4
+        with:
+          name: marts
+          path: app/data
 
       - name: Deploy
         env:
@@ -154,9 +168,10 @@ jobs:
 
       # Bundled into app.json with the rest of app/
       - name: Download marts
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release download data-marts --dir app/data --clobber
+        uses: actions/download-artifact@v4
+        with:
+          name: marts
+          path: app/data
 
       - name: Export app to static site
         run: Rscript -e 'shinylive::export("app", "_site", template_params = list(title = "Bank Check"))'

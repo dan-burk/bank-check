@@ -30,6 +30,8 @@ env:
 
 jobs:
   build:
+    # Publishes production data, so a manual run from another branch must not
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -56,15 +58,19 @@ jobs:
       # The stored raw files are what the change check compares against,
       # and revisions.csv is appended to, so a failed download must stop
       # the run (a silent "first pull" would wipe the revision history).
-      # An empty release is fine: that is the very first run.
+      # An empty release is fine: that is the very first run. revisions.csv
+      # is downloaded only if the asset exists (no revisions logged yet is
+      # normal); if it exists, any download error stops the run.
       - name: Download stored raw data and current marts
         run: |
           mkdir -p pipeline/out/raw prev-marts
           n=$(gh release view data-raw --json assets --jq '.assets | length')
           if [ "$n" -gt 0 ]; then
             gh release download data-raw --dir pipeline/out/raw --pattern 'risdate.*.parquet'
-            gh release download data-raw --dir pipeline/out --pattern 'revisions.csv' || \
-              echo "No revisions log yet"
+            assets=$(gh release view data-raw --json assets --jq '.assets[].name')
+            if grep -qx revisions.csv <<< "$assets"; then
+              gh release download data-raw --dir pipeline/out --pattern 'revisions.csv'
+            fi
           fi
           n=$(gh release view data-marts --json assets --jq '.assets | length')
           if [ "$n" -gt 0 ]; then
