@@ -30,6 +30,7 @@ XS_LABEL <- xs_quarter_label(XS)
 XS_RD <- max(as.integer(as.character(XS$RISDATE)), na.rm = TRUE)
 rm(XS)
 INDUSTRY <- load_industry()
+IND_LONG <- industry_long(INDUSTRY)   # both Industry charts filter this
 
 # All post-2000 failures (built by app/build/build_fail_panel.R)
 FAIL_PANEL <- load_fail_panel()
@@ -655,8 +656,8 @@ server <- function(input, output, session) {
   output$ind_is_table <- statement_ui("is", industry, "ind_unit", "ind_cmp",
                                       links = FALSE)
   ind_unit <- reactive(if (is.null(input$ind_unit)) "usd" else input$ind_unit)
-  output$ind_bs_plot <- renderPlotly(industry_history(INDUSTRY, "bs", ind_unit()))
-  output$ind_is_plot <- renderPlotly(industry_history(INDUSTRY, "is", ind_unit()))
+  output$ind_bs_plot <- renderPlotly(industry_history(IND_LONG, "bs", ind_unit()))
+  output$ind_is_plot <- renderPlotly(industry_history(IND_LONG, "is", ind_unit()))
 
   # Scoped explorers, one per category page ----
   for (id in names(EXPLORERS)) local({

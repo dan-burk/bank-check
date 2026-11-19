@@ -6,14 +6,17 @@
 # never folded into "Other" (docs/specs/industry-history.md).
 
 # One quarter's lines. kind: "head" (section title), "line", "total".
+# r may hold several quarters: rows then come line by line, each line
+# repeated once per row of r in r's order (industry_long() relies on it).
 statement_lines <- function(r) {
+  n <- nrow(r)
   loans_net <- r$LNLSGR - r$LNATRES
   borrow    <- r$OTHBOR + r$FREPP + r$SUBND
   revenue   <- r$NIMQ + r$NONIIQ
   pre_other <- revenue - r$NONIXQ - r$ELNATQ + r$IGLSECQ - r$ITAXQ
   ln <- function(section, label, value, kind = "line", tab = "") {
-    data.frame(section = section, label = label, value = value, kind = kind,
-               tab = tab)
+    data.frame(section = section, label = label, value = rep_len(value, n),
+               kind = kind, tab = tab)
   }
   bs <- rbind(
     ln("bs", "Assets", NA, "head"),
@@ -44,7 +47,7 @@ statement_lines <- function(r) {
   )
   # Percent of the block's base: total assets, or revenue
   bs$pct <- 100 * bs$value / r$ASSET
-  is$pct <- if (is.finite(revenue) && revenue > 0) 100 * is$value / revenue else NA
+  is$pct <- 100 * is$value / ifelse(is.finite(revenue) & revenue > 0, revenue, NA)
   rbind(bs, is)
 }
 

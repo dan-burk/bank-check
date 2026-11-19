@@ -130,14 +130,35 @@ old <- ind[ind$RISDATE == min(ind$RISDATE), ]
 stopifnot(inherits(statement_table(old, "bs", links = FALSE), "shiny.tag"))
 # History charts: a quarter with a forced NA field is a gap, not 0
 ind_gap <- ind; ind_gap$SC[nrow(ind_gap)] <- NA
+ind_long <- industry_long(ind)
 for (sec in c("bs", "is")) for (u in c("usd", "pct")) {
-  ok(paste("industry_history", sec, u), industry_history(ind, sec, u))
+  ok(paste("industry_history", sec, u), industry_history(ind_long, sec, u))
 }
 bt <- Filter(function(t) identical(t$name, "Bonds"),
-             plotly::plotly_build(industry_history(ind_gap, "bs"))$x$data)[[1]]
+             plotly::plotly_build(industry_history(industry_long(ind_gap), "bs"))$x$data)[[1]]
 by <- unlist(bt$y)
 stopifnot(sum(!is.na(by)) == sum(!is.na(ind$SC)) - 1, !any(by == 0, na.rm = TRUE))
 cat("ok: missing coverage is NA (\"–\" in tables, gaps in charts), never 0\n")
+
+# industry_long() (one vectorized statement_lines() call) equals the old
+# per-quarter loop, NA gaps and quarters missing from the mart included
+loop_long <- function(ind) {
+  q <- max(ind$RISDATE)
+  while (q[length(q)] > min(ind$RISDATE)) q <- c(q, prev_quarter_end(q[length(q)]))
+  l <- do.call(rbind, lapply(q, function(rd) {
+    l <- statement_lines(ind[ind$RISDATE == rd, ][1, ])
+    l$label[l$section == "bs" & l$label == "Other"] <- c("Other assets", "Other liabilities")
+    l$date <- as.Date(as.character(rd), "%Y%m%d")
+    l[l$kind != "head", ]
+  }))
+  l <- l[order(l$date), ]
+  rownames(l) <- NULL
+  l
+}
+ind_odd <- ind_gap[-c(5, 80), ]                       # two quarters missing
+ind_odd$NIMQ[3] <- -ind_odd$NONIIQ[3] - 1              # revenue < 0: is pct NA
+for (x in list(ind, ind_odd)) stopifnot(identical(industry_long(x), loop_long(x)))
+cat("ok: industry_long matches the per-quarter loop\n")
 
 sel <- data.frame(
   label = names(banks),
