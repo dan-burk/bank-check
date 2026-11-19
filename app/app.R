@@ -254,8 +254,6 @@ ui <- page_navbar(
 
   nav_panel(
     "Industry",
-    # Cartoon while the history charts build (app.js fills it)
-    div(id = "ind_loader", role = "status", `aria-live` = "polite"),
     card(
       card_header(
         class = "d-flex flex-wrap justify-content-between align-items-center gap-2",
