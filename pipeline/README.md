@@ -55,10 +55,13 @@ committed to git.
    request for the FDIC directory of active banks.
 5. **Checks.** `build.R` checks the marts (bank counts, no duplicates,
    assets = liabilities + equity for the industry, no quarter losing more
-   than 10% of banks). The workflow then runs the app's smoke and integrity
+   than 10% of banks, no missing quarters, every field covered in the last
+   10 quarters, sums matching FDIC's own aggregate API, Q1 net income =
+   year to date). The workflow then runs the app's smoke and integrity
    tests against them. Any failure stops the run: nothing is uploaded and
    the last good data stays live.
-6. **Publish.** Upload raw to the `data-raw` release. If any mart changed
+6. **Publish.** Upload the quarters pulled this run, `manifest.csv` and
+   `revisions.csv` to the `data-raw` release. If any mart changed
    (byte comparison with the published copy), upload the marts to
    `data-marts` and start the deploy. Most nights nothing changed and
    nothing deploys.
@@ -67,7 +70,8 @@ committed to git.
 
 | Mart | One row per | Used for |
 |---|---|---|
-| `industry_quarterly` | quarter, every statement line summed | Industry tab |
+| `industry_quarterly` | quarter, every statement line summed (NA where `field_coverage` is below `COVERAGE_MIN`) | Industry tab: table and charts |
+| `field_coverage` | quarter × statement field: banks reporting it and their share of assets | Audit of gaps; the checks in `build.R` |
 | `latest_snapshot` | bank in the newest quarter, plus active banks that have not filed yet | Peer bands (banks that filed) and the bank picker (`active` banks) |
 
 `latest_snapshot` has an `active` flag because "banks in the latest
@@ -75,8 +79,12 @@ quarter" is not the same as "active banks": the quarter includes clearing
 houses, trust-only charters and banks that closed after quarter end, and a
 newly chartered bank is active before its first filing.
 
-Planned: `peer_bands_quarterly` (historical peer bands), `fail_panel`
-moved into this pipeline, and longer history in `industry_quarterly`.
+`industry_quarterly` covers every raw quarter on hand, back to 1984 Q1
+once the one-time backfill has run (`quarters = 171` on the workflow; see
+`docs/specs/industry-history.md`).
+
+Planned: `peer_bands_quarterly` (historical peer bands) and `fail_panel`
+moved into this pipeline.
 
 ## Storage
 

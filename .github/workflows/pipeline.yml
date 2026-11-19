@@ -8,13 +8,20 @@
 #
 # Any failure (FDIC API down, a mart check or test trips) stops the job
 # before anything is uploaded, so the last good data stays live and GitHub
-# emails the repo owner. Run it by hand from the Actions tab.
+# emails the repo owner. Run it by hand from the Actions tab; set
+# "quarters" to 171 once for the 1984-to-now backfill
+# (docs/specs/industry-history.md).
 name: Data pipeline
 
 on:
   schedule:
     - cron: "0 8 * * *"   # 08:00 UTC daily
   workflow_dispatch:
+    inputs:
+      quarters:
+        description: "Quarters to pull, newest first (171 = back to 1984 Q1)"
+        type: number
+        default: 10
 
 permissions:
   contents: write   # upload release assets
@@ -60,7 +67,8 @@ jobs:
       # the run (a silent "first pull" would wipe the revision history).
       # An empty release is fine: that is the very first run. revisions.csv
       # is downloaded only if the asset exists (no revisions logged yet is
-      # normal); if it exists, any download error stops the run.
+      # normal); if it exists, any download error stops the run. Same for
+      # manifest.csv, which build.R merges into.
       - name: Download stored raw data and current marts
         run: |
           mkdir -p pipeline/out/raw prev-marts
@@ -71,14 +79,23 @@ jobs:
             if grep -qx revisions.csv <<< "$assets"; then
               gh release download data-raw --dir pipeline/out --pattern 'revisions.csv'
             fi
+            if grep -qx manifest.csv <<< "$assets"; then
+              gh release download data-raw --dir pipeline/out/raw --pattern 'manifest.csv'
+            fi
           fi
           n=$(gh release view data-marts --json assets --jq '.assets | length')
           if [ "$n" -gt 0 ]; then
             gh release download data-marts --dir prev-marts
           fi
 
+      # The marker dates this run, so the upload sends only the quarters
+      # it pulled, not all ~170 stored files
       - name: Build raw and marts
-        run: Rscript pipeline/build.R
+        env:
+          QUARTERS: ${{ inputs.quarters }}
+        run: |
+          touch pipeline/out/.run-start
+          Rscript pipeline/build.R "${QUARTERS:-10}"
 
       # Same tests the deploy runs, against the new marts. The integrity
       # test's live phase is skipped: the pipeline makes no extra API calls.
@@ -92,7 +109,8 @@ jobs:
 
       - name: Upload raw data
         run: |
-          files=(pipeline/out/raw/risdate.*.parquet pipeline/out/raw/manifest.csv)
+          mapfile -t files < <(find pipeline/out/raw -name 'risdate.*.parquet' -newer pipeline/out/.run-start)
+          files+=(pipeline/out/raw/manifest.csv)
           [ -f pipeline/out/revisions.csv ] && files+=(pipeline/out/revisions.csv)
           gh release upload data-raw "${files[@]}" --clobber
 

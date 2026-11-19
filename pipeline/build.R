@@ -6,23 +6,34 @@
 # Run from the repo root:
 #   Rscript.exe pipeline/build.R          # last 10 quarters
 #   Rscript.exe pipeline/build.R 40       # last 40 quarters
+#   Rscript.exe pipeline/build.R 171      # backfill: 1984 Q1 to now
+#   Rscript.exe pipeline/build.R 19841231,19880630   # a sample, plus the
+#                                         # newest quarter (local testing:
+#                                         # gaps are reported, not failed)
 #
 # Output (gitignored), under pipeline/out/:
 #   raw/risdate.YYYYMMDD.parquet   every bank, one quarter, APP_FIELDS + CITY
-#   raw/manifest.csv               one row per quarter pulled in this run
+#   raw/manifest.csv               one row per quarter on hand (merged with
+#                                  the stored manifest by risdate)
 #   revisions.csv                  appended: every value FDIC changed since
 #                                  the last pull (quarter, CERT, field, old, new)
 #   marts/industry_quarterly.parquet  statement lines summed, one row per quarter
 #   marts/latest_snapshot.parquet     newest quarter, one row per bank, plus
 #                                     the active directory (NAME, active flag)
+#   marts/field_coverage.parquet      per quarter and statement field: banks
+#                                     reporting it and their share of assets
 #
 # API etiquette: one request at a time, at least 2 s apart, 3 retries with
 # growing waits, then stop. Loops over quarters, never over banks.
 
 suppressPackageStartupMessages(library(nanoparquet))
 
-N_QUARTERS  <- as.integer(commandArgs(trailingOnly = TRUE)[1])
-if (is.na(N_QUARTERS)) N_QUARTERS <- 10L
+ARG <- commandArgs(trailingOnly = TRUE)[1]
+SAMPLE <- !is.na(ARG) && grepl(",", ARG)   # explicit quarter list
+N_QUARTERS  <- if (SAMPLE) NA_integer_ else as.integer(ARG)
+if (!SAMPLE && is.na(N_QUARTERS)) N_QUARTERS <- 10L
+HISTORY_START <- 19840331L   # first quarter in the FDIC API
+RECENT <- 10L                # quarters where any gap fails the run
 MIN_GAP_S   <- 2
 RETRY_WAITS <- c(10, 30, 90)
 PAGE_SIZE   <- 10000L
@@ -130,8 +141,14 @@ t0 <- Sys.time()
 newest <- latest_risdate()
 if (is.na(newest)) stop("FDIC API returned no quarters")
 quarters <- newest
-while (length(quarters) < N_QUARTERS) {
-  quarters <- c(quarters, prev_quarter_end(quarters[length(quarters)]))
+if (SAMPLE) {
+  quarters <- sort(unique(c(newest, as.integer(strsplit(ARG, ",")[[1]]))),
+                   decreasing = TRUE)
+} else {
+  while (length(quarters) < N_QUARTERS &&
+         quarters[length(quarters)] > HISTORY_START) {
+    quarters <- c(quarters, prev_quarter_end(quarters[length(quarters)]))
+  }
 }
 cat("Pulling", length(quarters), "quarters:", min(quarters), "to", newest, "\n")
 
@@ -164,8 +181,17 @@ for (rd in quarters) {
               if (is.na(n_changes)) "first pull" else n_changes))
 }
 
+# Merge into the stored manifest, so quarters pulled by an earlier run
+# (the backfill) keep their rows
 manifest <- do.call(rbind, manifest)
-utils::write.csv(manifest, file.path(RAW, "manifest.csv"), row.names = FALSE)
+man_path <- file.path(RAW, "manifest.csv")
+if (file.exists(man_path)) {
+  old <- utils::read.csv(man_path)
+  manifest <- rbind(old[!old$risdate %in% manifest$risdate, names(manifest)],
+                    manifest)
+}
+manifest <- manifest[order(-manifest$risdate), ]
+utils::write.csv(manifest, man_path, row.names = FALSE)
 
 rev_path <- file.path(OUT, "revisions.csv")
 if (length(revisions)) {
@@ -176,15 +202,75 @@ if (length(revisions)) {
   cat("Revisions logged:", nrow(rev), "->", rev_path, "\n")
 }
 
-# ---- Mart: industry_quarterly ---------------------------------------------
+# ---- Marts: industry_quarterly, field_coverage -----------------------------
 # Built from every raw quarter on disk (not just this run), with the app's
 # own industry_totals() so the numbers match the Industry tab exactly.
+# raw_sums are plain sums for the aggregation cross-check below.
+AGG_FIELDS <- c("ASSET", "LIAB", "EQTOT", "DEP", "NETINCQ")
 files <- sort(list.files(RAW, pattern = "^risdate\\.\\d{8}\\.parquet$",
                          full.names = TRUE), decreasing = TRUE)
-ind <- do.call(rbind, lapply(files, function(f) {
-  industry_totals(as.data.frame(read_parquet(f)))
-}))
+ind <- list(); cov <- list(); raw_sums <- list()
+for (f in files) {
+  x <- as.data.frame(read_parquet(f))
+  ind[[f]] <- industry_totals(x)
+  cov[[f]] <- field_coverage(x)
+  raw_sums[[f]] <- data.frame(
+    RISDATE = as.integer(x$RISDATE[1]), n = nrow(x),
+    as.list(colSums(x[AGG_FIELDS], na.rm = TRUE)),
+    NETINC = sum(x$NETINC, na.rm = TRUE))
+}
+ind <- do.call(rbind, ind); cov <- do.call(rbind, cov)
+raw_sums <- do.call(rbind, raw_sums)
+rownames(ind) <- rownames(cov) <- rownames(raw_sums) <- NULL
 ind$RISDATE <- as.integer(ind$RISDATE)
+
+# Coverage report: every field and quarter below 100% of assets
+low <- cov[cov$asset_share < 1, ]
+if (nrow(low)) {
+  cat("Field coverage below 100% of assets (* = below COVERAGE_MIN, mart NA):\n")
+  for (k in unique(low$field)) {
+    l <- low[low$field == k, ]
+    cat(sprintf("  %-8s %s\n", k, paste0(l$RISDATE, ifelse(
+      l$asset_share < COVERAGE_MIN, "*", ""), " ",
+      formatC(l$asset_share, format = "f", digits = 4), collapse = ", ")))
+  }
+} else {
+  cat("Field coverage: 100% of assets for every field and quarter.\n")
+}
+
+# Cross-check 1: FDIC's own server-side sums over the same quarters, one
+# request. Aggregate output gives RISDATE as epoch milliseconds.
+agg <- flatten_body(fdic_query(FDIC_FINANCIALS_ENDPOINT, list(
+  filters = paste0("RISDATE:[", min(ind$RISDATE), " TO ", newest, "]"),
+  agg_by = "RISDATE", agg_sum_fields = paste(AGG_FIELDS, collapse = ","),
+  agg_limit = 1000, limit = 0)))
+agg$RISDATE <- as.integer(format(as.POSIXct(agg$RISDATE / 1000,
+  origin = "1970-01-01", tz = "UTC"), "%Y%m%d"))
+agg <- agg[match(raw_sums$RISDATE, agg$RISDATE), ]
+agg_ok <- !is.na(agg$count) & agg$count == raw_sums$n
+for (k in AGG_FIELDS) {
+  a <- agg[[paste0("sum_", k)]]; b <- raw_sums[[k]]
+  agg_ok <- agg_ok & !is.na(a) & abs(a - b) <= 1e-9 * pmax(1, abs(b))
+}
+
+# Cross-check 2: in Q1, quarterly net income is the year to date
+q1 <- raw_sums$RISDATE %% 10000L == 331L
+q1_gap <- abs(raw_sums$NETINCQ - raw_sums$NETINC) / pmax(1, abs(raw_sums$NETINC))
+q1_bad <- raw_sums$RISDATE[q1 & q1_gap > 0.001]
+if (length(q1_bad)) cat("Q1 NETINCQ != NETINC (>0.1%):", q1_bad, "\n")
+
+# The quarter sequence must have no holes from the oldest file to newest
+want <- newest
+while (want[length(want)] > min(ind$RISDATE)) {
+  want <- c(want, prev_quarter_end(want[length(want)]))
+}
+holes <- setdiff(want, ind$RISDATE)
+recent <- utils::head(want, RECENT)
+if (length(holes)) cat("Quarters missing from raw:", length(holes), "\n")
+if (min(ind$RISDATE) > HISTORY_START) {
+  cat("History starts at", min(ind$RISDATE), "not", HISTORY_START,
+      "(backfill not run yet)\n")
+}
 
 # ---- Mart: latest_snapshot -------------------------------------------------
 # The newest quarter's filings joined to the FDIC directory of active banks.
@@ -225,20 +311,38 @@ need <- c("CERT", "RISDATE", "ASSET", "DEP", "EQ", "LNLSNET", "LNATRES")
 check(all(need %in% names(snap)), "snapshot missing core columns")
 check(nrow(ind) == length(files), "industry_quarterly row per raw quarter")
 check(!anyDuplicated(ind$RISDATE), "duplicate quarters in industry_quarterly")
-check(all(ind$ASSET > 1e10), "industry assets below $10T")   # $ thousands
+check(all(ind$ASSET > 1e9), "industry assets below $1T")   # $ thousands; 1984 was $3.7T
+check(SAMPLE || length(holes) == 0,
+      paste("quarters missing from raw:", paste(utils::head(holes, 10), collapse = ",")))
+check(all(manifest$risdate %in% ind$RISDATE), "manifest lists quarters with no raw file")
+check(all(cov$asset_share[cov$RISDATE %in% recent] >= COVERAGE_MIN),
+      "a statement field is below COVERAGE_MIN in the last 10 quarters")
+check(nrow(cov) == 18 * nrow(ind), "field_coverage is not 18 fields per quarter")
+lowc <- cov[cov$asset_share < COVERAGE_MIN, ]
+check(all(is.na(ind[cbind(match(lowc$RISDATE, ind$RISDATE),
+                          match(lowc$field, names(ind)))])),
+      "a mart value is summed over coverage below COVERAGE_MIN")
+check(all(agg_ok), paste("FDIC aggregate sums disagree for",
+                         paste(raw_sums$RISDATE[!agg_ok], collapse = ",")))
+check(!any(q1_bad %in% recent), "Q1 NETINCQ != NETINC in the last 10 quarters")
 check(ind$RISDATE[1] == newest && ind$n_banks[1] == nrow(filed),
       "industry newest quarter disagrees with snapshot")
 # Balance sheet identity on the summed industry: assets = liabilities +
-# equity (EQTOT includes minority interest), within 0.1%
+# equity (EQTOT includes minority interest), within 0.1%. Quarters where
+# LIAB or EQTOT is NA by coverage are skipped and reported.
 gap <- abs(ind$ASSET - (ind$LIAB + ind$EQTOT)) / ind$ASSET
-check(all(gap < 0.001), "industry assets != liabilities + equity")
+if (anyNA(gap)) cat("Identity skipped (LIAB/EQTOT NA):", ind$RISDATE[is.na(gap)], "\n")
+check(all(gap < 0.001, na.rm = TRUE), "industry assets != liabilities + equity")
 # Quarter-over-quarter bank count moves ~1%; a big drop means a partial pull
 n <- ind$n_banks
-check(all(utils::head(n, -1) >= 0.9 * utils::tail(n, -1)),
+adj <- utils::tail(ind$RISDATE, -1) ==
+  vapply(utils::head(ind$RISDATE, -1), prev_quarter_end, 1L)
+check(all((utils::head(n, -1) >= 0.9 * utils::tail(n, -1))[adj]),
       "bank count fell more than 10% between quarters")
 
 write_parquet(ind,  file.path(MARTS, "industry_quarterly.parquet"))
 write_parquet(snap, file.path(MARTS, "latest_snapshot.parquet"), compression = "zstd")
+write_parquet(cov,  file.path(MARTS, "field_coverage.parquet"))
 
 cat(sprintf("Done: %d requests, %.0f s. Raw %.1f MB across %d quarters.\n",
             .n_requests, as.numeric(difftime(Sys.time(), t0, units = "secs")),
