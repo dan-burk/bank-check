@@ -1,0 +1,59 @@
+# R from cached .debs, so a slow Ubuntu apt mirror cannot stall a job.
+# setup-r@v2's own install apt-gets ~170 packages (devscripts, ghostscript,
+# qpdf: R CMD check tooling we never use) plus R's 9 runtime deps; on a
+# slow mirror that took 7-10 min. Here the Posit R .deb and those 9 deps are
+# downloaded once per OS image + R version and cached; a hit installs
+# offline with dpkg. setup-r then runs with install-r: false, so it still
+# sets R_LIBS_USER, ~/.Rprofile and the P3M user agent exactly as before.
+name: Set up R (cached)
+description: Install a pinned R from cached debs, then configure it with r-lib/actions/setup-r
+inputs:
+  r-version:
+    description: Exact R version, e.g. 4.5.1
+    required: true
+runs:
+  using: composite
+  steps:
+    - id: key
+      shell: bash
+      run: |
+        . /etc/os-release
+        echo "distro=ubuntu-${VERSION_ID//./}" >> "$GITHUB_OUTPUT"
+        echo "key=r-debs-$ImageOS-$(uname -m)-r${{ inputs.r-version }}-v1" >> "$GITHUB_OUTPUT"
+
+    - id: cache
+      uses: actions/cache@v4
+      with:
+        path: ~/r-debs
+        key: ${{ steps.key.outputs.key }}
+
+    - name: Download R and its dependencies
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        mkdir -p ~/r-debs
+        deb=~/r-debs/r-${{ inputs.r-version }}_1_amd64.deb
+        curl -fsSL --retry 3 -o "$deb" \
+          "https://cdn.posit.co/r/${{ steps.key.outputs.distro }}/pkgs/r-${{ inputs.r-version }}_1_amd64.deb"
+        sudo apt-get clean
+        sudo apt-get update -y
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --download-only "$deb"
+        cp /var/cache/apt/archives/*.deb ~/r-debs/
+
+    # If a newer runner image drifts from the cached dep versions, dpkg
+    # fails and apt repairs from the mirror: slow, but still correct.
+    - name: Install R
+      shell: bash
+      run: |
+        sudo DEBIAN_FRONTEND=noninteractive dpkg -i ~/r-debs/*.deb || {
+          sudo apt-get update -y
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -f
+        }
+        sudo ln -sf /opt/R/${{ inputs.r-version }}/bin/R /usr/local/bin/R
+        sudo ln -sf /opt/R/${{ inputs.r-version }}/bin/Rscript /usr/local/bin/Rscript
+        Rscript -e 'stopifnot(getRversion() == "${{ inputs.r-version }}", capabilities("libcurl"))'
+
+    - uses: r-lib/actions/setup-r@v2
+      with:
+        r-version: ${{ inputs.r-version }}
+        install-r: false
