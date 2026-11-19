@@ -502,3 +502,54 @@ trajectory_plot <- function(sel_panel, code, meta, baseline = NULL,
   base_layout(p, y_title, "Quarters before failure (0 = failure)") |>
     plotly::layout(hovermode = "closest")
 }
+
+# Industry statement lines over time (Industry tab), one line per row of
+# the statement table. Color follows the line; totals are neutral ink told
+# apart by dash. NA values and quarters missing from the mart are gaps in
+# the line, never 0.
+industry_history <- function(ind, section, unit = "usd") {
+  # Inside the function: R/ loads plots.R before theme.R (COL_FG)
+  style <- list(
+    "Loans" = "#2C5F8A", "− Allowance*" = "#D55E00", "Bonds" = "#009E73",
+    "Cash" = "#56B4E9", "Other assets" = "#999999",
+    "Total assets" = c(COL_FG, "solid"),
+    "Deposits" = "#E69F00", "Borrowings" = "#CC79A7",
+    "Other liabilities" = "#8C510A", "Total liabilities" = c(COL_FG, "dash"),
+    "Equity (owners)" = c(COL_FG, "dot"),
+    "Interest earned − paid" = "#2C5F8A", "Fees" = "#009E73",
+    "Revenue" = c(COL_FG, "solid"), "Expenses" = "#E69F00",
+    "Loan loss provision" = "#D55E00", "Bond gains/losses" = "#CC79A7",
+    "Taxes" = "#8C510A", "Other" = "#999999", "Net income" = c(COL_FG, "dash")
+  )
+  q <- max(ind$RISDATE)
+  while (q[length(q)] > min(ind$RISDATE)) q <- c(q, prev_quarter_end(q[length(q)]))
+  long <- do.call(rbind, lapply(q, function(rd) {
+    r <- ind[ind$RISDATE == rd, ][1, ]   # a quarter missing from the mart is all NA
+    l <- statement_lines(r)
+    o <- l$section == "bs" & l$label == "Other"
+    l$label[o] <- c("Other assets", "Other liabilities")
+    l <- l[l$section == section & l$kind != "head", ]
+    l$date <- as.Date(as.character(rd), "%Y%m%d")
+    l
+  }))
+  long <- long[order(long$date), ]
+  if (unit == "pct") {
+    long$y <- long$pct; y_title <- if (section == "bs") "% of total assets" else "% of revenue"
+    fmt <- "%{y:.1f}%"
+  } else {
+    sc <- usd_axis_unit(long$value)
+    long$y <- long$value / sc$div; y_title <- sc$word
+    fmt <- paste0("$%{y:,.1f}", sc$letter)
+  }
+  p <- plotly::plot_ly()
+  for (lb in unique(long$label)) {
+    s <- style[[lb]]
+    d <- long[long$label == lb, ]
+    p <- plotly::add_trace(p, data = d, x = ~date, y = ~y, name = lb,
+      type = "scatter", mode = "lines", connectgaps = FALSE,
+      line = list(color = s[1], width = if (length(s) > 1) 2.5 else 1.5,
+                  dash = if (length(s) > 1) s[2] else "solid"),
+      hovertemplate = paste0(lb, ": ", fmt, "<extra></extra>"))
+  }
+  base_layout(p, y_title) |> range_buttons()
+}

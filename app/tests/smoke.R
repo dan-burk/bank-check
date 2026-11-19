@@ -111,6 +111,34 @@ stopifnot(tot$n_banks == 2, abs(tot$ASSET - sum(mini_xs$ASSET)) < 1e-6,
           inherits(statement_table(tot, "is", "pct", links = FALSE), "shiny.tag"))
 cat("ok: industry totals sum the banks and render\n")
 
+# No silent zeros: a field reported by banks holding < COVERAGE_MIN of
+# assets is NA, never a partial sum; its line and "Other" show "–" while
+# the totals still show
+gap_xs <- mini_xs
+gap_xs$SC[which.max(gap_xs$ASSET)] <- NA
+gtot <- industry_totals(gap_xs)
+stopifnot(is.na(gtot$SC), !is.na(gtot$ASSET),
+          field_coverage(gap_xs)$asset_share[field_coverage(gap_xs)$field == "SC"] < COVERAGE_MIN)
+gl <- statement_lines(gtot)
+stopifnot(is.na(gl$value[gl$label == "Bonds"]),
+          is.na(gl$value[gl$section == "bs" & gl$label == "Other"][1]),
+          !is.na(gl$value[gl$label == "Total assets"]))
+gh <- as.character(statement_table(gtot, "bs", links = FALSE))
+stopifnot(grepl("–", gh, fixed = TRUE))
+# Oldest industry quarter has no prior quarter: change column is "–"
+old <- ind[ind$RISDATE == min(ind$RISDATE), ]
+stopifnot(inherits(statement_table(old, "bs", links = FALSE), "shiny.tag"))
+# History charts: a quarter with a forced NA field is a gap, not 0
+ind_gap <- ind; ind_gap$SC[nrow(ind_gap)] <- NA
+for (sec in c("bs", "is")) for (u in c("usd", "pct")) {
+  ok(paste("industry_history", sec, u), industry_history(ind, sec, u))
+}
+bt <- Filter(function(t) identical(t$name, "Bonds"),
+             plotly::plotly_build(industry_history(ind_gap, "bs"))$x$data)[[1]]
+by <- unlist(bt$y)
+stopifnot(sum(!is.na(by)) == sum(!is.na(ind$SC)) - 1, !any(by == 0, na.rm = TRUE))
+cat("ok: missing coverage is NA (\"–\" in tables, gaps in charts), never 0\n")
+
 sel <- data.frame(
   label = names(banks),
   asset = sapply(banks, function(d) utils::tail(d$ASSET[!is.na(d$ASSET)], 1)),
@@ -205,6 +233,7 @@ shiny::testServer(app = "app", {
   )
   outs <- c("kpis", "scale_plot", "overview_grid", "bs_table", "is_table",
             "ind_caption", "ind_bs_table", "ind_is_table",
+            "ind_bs_plot", "ind_is_plot",
             "cap_plot", "cap_caveat", "cap_chip",
             "aq_plot", "earn_plot", "liq_plot",
             "pipeline_plot", "rc_plot", "prov_plot", "mix_plot",

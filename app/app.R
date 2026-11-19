@@ -267,7 +267,14 @@ ui <- page_navbar(
         col_widths = breakpoints(xs = 12, lg = c(6, 6)),
         div(tags$h6("Balance sheet"), uiOutput("ind_bs_table")),
         div(tags$h6("Income statement"), uiOutput("ind_is_table")))
-    )
+    ),
+    # Every quarter in the mart; follows the $/% toggle above
+    card(card_header("Balance sheet over time"),
+         plotlyOutput("ind_bs_plot", height = "420px")),
+    card(card_header("Income statement over time"),
+         plotlyOutput("ind_is_plot", height = "420px"),
+         div(class = "text-muted small",
+             "Quarterly, nominal dollars. A gap means FDIC data does not cover that line for that quarter."))
   ),
 
   nav_panel("Capital", ui_explorer("cap", EXPLORERS$cap$groups, EXPLORERS$cap$default)),
@@ -647,6 +654,9 @@ server <- function(input, output, session) {
                                       links = FALSE)
   output$ind_is_table <- statement_ui("is", industry, "ind_unit", "ind_cmp",
                                       links = FALSE)
+  ind_unit <- reactive(if (is.null(input$ind_unit)) "usd" else input$ind_unit)
+  output$ind_bs_plot <- renderPlotly(industry_history(INDUSTRY, "bs", ind_unit()))
+  output$ind_is_plot <- renderPlotly(industry_history(INDUSTRY, "is", ind_unit()))
 
   # Scoped explorers, one per category page ----
   for (id in names(EXPLORERS)) local({
