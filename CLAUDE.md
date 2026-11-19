@@ -75,9 +75,10 @@ Rscript.exe pipeline/build.R [N_QUARTERS]                 # default 10; output i
 - History starts at **1984 Q1** (17,930 filers; 17,949 at 1984-12-31).
   Early quarters have more than 10k filers, so `pull_quarter()` pages
   through them.
-- Known silent NA→0 spots: `z()` in `statement_lines()` and
-  `na.rm = TRUE` in `industry_totals()`. Missing data must be detected and
-  reported, not coerced. See `docs/specs/industry-history.md`.
+- Missing data is detected and reported, never coerced to 0:
+  `statement_lines()` propagates NA, and `industry_totals()` returns NA for
+  any field below `COVERAGE_MIN` (`field_coverage()`, which excludes
+  foreign-bank branches). See `docs/specs/industry-history.md`.
 - webR limits: keep request URLs under about 4,000 chars (use date ranges,
   not OR-lists). The app reads only from `app/`. Don't add readr or an HTTP
   client package. Shinylive's dependency scan reads comments too, so don't

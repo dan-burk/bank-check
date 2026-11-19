@@ -1,15 +1,16 @@
 # Balance sheet and income statement for the Overview, built from FDIC's
 # own call report lines ($ thousands). "Other" rows are the remainder, so
 # each block adds up exactly to FDIC's reported total. `tab` names the page
-# that explains the line and links to it.
+# that explains the line and links to it. A missing line stays NA (shown
+# as "–"), and so does any remainder or subtotal built from it: never 0,
+# never folded into "Other" (docs/specs/industry-history.md).
 
 # One quarter's lines. kind: "head" (section title), "line", "total".
 statement_lines <- function(r) {
-  z <- function(x) ifelse(is.na(x), 0, x)   # unreported line = nothing
-  loans_net <- z(r$LNLSGR) - z(r$LNATRES)
-  borrow    <- z(r$OTHBOR) + z(r$FREPP) + z(r$SUBND)
-  revenue   <- z(r$NIMQ) + z(r$NONIIQ)
-  pre_other <- revenue - z(r$NONIXQ) - z(r$ELNATQ) + z(r$IGLSECQ) - z(r$ITAXQ)
+  loans_net <- r$LNLSGR - r$LNATRES
+  borrow    <- r$OTHBOR + r$FREPP + r$SUBND
+  revenue   <- r$NIMQ + r$NONIIQ
+  pre_other <- revenue - r$NONIXQ - r$ELNATQ + r$IGLSECQ - r$ITAXQ
   ln <- function(section, label, value, kind = "line", tab = "") {
     data.frame(section = section, label = label, value = value, kind = kind,
                tab = tab)
@@ -20,12 +21,12 @@ statement_lines <- function(r) {
     ln("bs", "− Allowance*", -r$LNATRES, tab = "Asset Quality"),
     ln("bs", "Bonds", r$SC, tab = "Sensitivity"),
     ln("bs", "Cash", r$CHBAL, tab = "Liquidity & Funding"),
-    ln("bs", "Other", r$ASSET - loans_net - z(r$SC) - z(r$CHBAL)),
+    ln("bs", "Other", r$ASSET - loans_net - r$SC - r$CHBAL),
     ln("bs", "Total assets", r$ASSET, "total"),
     ln("bs", "Liabilities", NA, "head"),
     ln("bs", "Deposits", r$DEP, tab = "Liquidity & Funding"),
     ln("bs", "Borrowings", borrow, tab = "Liquidity & Funding"),
-    ln("bs", "Other", r$LIAB - z(r$DEP) - borrow),
+    ln("bs", "Other", r$LIAB - r$DEP - borrow),
     ln("bs", "Total liabilities", r$LIAB, "total"),
     ln("bs", "Capital", NA, "head"),
     ln("bs", "Equity (owners)", r$EQTOT, "total", "Capital")
@@ -159,11 +160,39 @@ STATEMENT_FIELDS <- paste0(
   "OTHBOR,FREPP,SUBND,NIMQ,NONIIQ,NONIXQ,ELNATQ,IGLSECQ,ITAXQ,NETINCQ"
 )
 
-# One quarter's cross-section summed into a single "bank" row, so the
-# statement code works on it unchanged
-industry_totals <- function(xs) {
+# A field counts for the industry only if the banks reporting it (a
+# reported 0 counts) hold at least this share of industry assets
+COVERAGE_MIN <- 0.995
+
+# Coverage of each statement field in one quarter's cross-section. Insured
+# US branches of foreign banks (no equity, LIAB = ASSET) file FFIEC 002, not
+# a call report, so they have no equity or income lines: they are left out
+# of the weights (n_branches), as FDIC's own industry profile leaves them
+# out of income. ASSET is its own weight, so its share is by bank count.
+field_coverage <- function(xs) {
   f <- setdiff(strsplit(STATEMENT_FIELDS, ",")[[1]], c("CERT", "RISDATE"))
-  row <- as.data.frame(lapply(xs[f], function(v) sum(as.numeric(v), na.rm = TRUE)))
+  branch <- is.na(xs$EQTOT) & !is.na(xs$LIAB) & xs$LIAB == xs$ASSET
+  a <- ifelse(branch, 0, as.numeric(xs$ASSET))
+  has <- lapply(setNames(f, f), function(k) {
+    if (is.null(xs[[k]])) rep(FALSE, nrow(xs)) else !is.na(xs[[k]])
+  })
+  n_rep <- vapply(has, sum, 1L)
+  share <- vapply(has, function(h) sum(a[h], na.rm = TRUE) / sum(a, na.rm = TRUE), 1)
+  share["ASSET"] <- n_rep[["ASSET"]] / nrow(xs)
+  data.frame(RISDATE = as.integer(xs$RISDATE[1]), field = f,
+             n_banks = nrow(xs), n_branches = sum(branch), n_reported = n_rep,
+             asset_share = share, row.names = NULL)
+}
+
+# One quarter's cross-section summed into a single "bank" row, so the
+# statement code works on it unchanged. A field below COVERAGE_MIN is NA,
+# never a partial sum.
+industry_totals <- function(xs) {
+  cov <- field_coverage(xs)
+  row <- as.data.frame(lapply(setNames(cov$field, cov$field), function(k) {
+    sum(as.numeric(xs[[k]]), na.rm = TRUE)
+  }))
+  row[cov$field[!(cov$asset_share >= COVERAGE_MIN)]] <- NA_real_
   row$RISDATE <- as.character(xs$RISDATE[1])
   row$n_banks <- nrow(xs)
   row
