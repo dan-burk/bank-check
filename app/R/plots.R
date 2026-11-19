@@ -503,11 +503,27 @@ trajectory_plot <- function(sel_panel, code, meta, baseline = NULL,
     plotly::layout(hovermode = "closest")
 }
 
+# Every quarter's statement lines for both sections, oldest first: the
+# data behind both Industry charts and both units, so build it once
+# (IND_LONG in app.R). A quarter missing from the mart is all NA.
+industry_long <- function(ind) {
+  q <- max(ind$RISDATE)
+  while (q[length(q)] > min(ind$RISDATE)) q <- c(q, prev_quarter_end(q[length(q)]))
+  l <- statement_lines(ind[match(q, ind$RISDATE), ])
+  l$label[l$section == "bs" & l$label == "Other"] <-
+    rep(c("Other assets", "Other liabilities"), each = length(q))
+  l$date <- as.Date(as.character(q), "%Y%m%d")   # recycles: one block per line
+  l <- l[l$kind != "head", ]
+  l <- l[order(l$date), ]   # stable: lines keep statement order within a date
+  rownames(l) <- NULL
+  l
+}
+
 # Industry statement lines over time (Industry tab), one line per row of
-# the statement table. Color follows the line; totals are neutral ink told
-# apart by dash. NA values and quarters missing from the mart are gaps in
-# the line, never 0.
-industry_history <- function(ind, section, unit = "usd") {
+# the statement table. long = industry_long(). Color follows the line;
+# totals are neutral ink told apart by dash. NA values and quarters missing
+# from the mart are gaps in the line, never 0.
+industry_history <- function(long, section, unit = "usd") {
   # Inside the function: R/ loads plots.R before theme.R (COL_FG)
   style <- list(
     "Loans" = "#2C5F8A", "− Allowance*" = "#D55E00", "Bonds" = "#009E73",
@@ -521,18 +537,7 @@ industry_history <- function(ind, section, unit = "usd") {
     "Loan loss provision" = "#D55E00", "Bond gains/losses" = "#CC79A7",
     "Taxes" = "#8C510A", "Other" = "#999999", "Net income" = c(COL_FG, "dash")
   )
-  q <- max(ind$RISDATE)
-  while (q[length(q)] > min(ind$RISDATE)) q <- c(q, prev_quarter_end(q[length(q)]))
-  long <- do.call(rbind, lapply(q, function(rd) {
-    r <- ind[ind$RISDATE == rd, ][1, ]   # a quarter missing from the mart is all NA
-    l <- statement_lines(r)
-    o <- l$section == "bs" & l$label == "Other"
-    l$label[o] <- c("Other assets", "Other liabilities")
-    l <- l[l$section == section & l$kind != "head", ]
-    l$date <- as.Date(as.character(rd), "%Y%m%d")
-    l
-  }))
-  long <- long[order(long$date), ]
+  long <- long[long$section == section, ]
   if (unit == "pct") {
     long$y <- long$pct; y_title <- if (section == "bs") "% of total assets" else "% of revenue"
     fmt <- "%{y:.1f}%"
