@@ -1,6 +1,7 @@
 # Spec: Industry statements over time (1984 to now)
 
-Status: draft for review. No code has changed yet.
+Status: implemented on `spec/industry-history`; the one-time backfill run
+is still to do (see "Still open for Daniel").
 
 ## Goal
 
@@ -22,6 +23,12 @@ same way today (the Dacotah fixture goes back to 1984).
    missing value into 0 or into "Other".
 5. Architecture is unchanged: `build.R` builds the marts from raw parquet
    files in the `data-raw` release. No new database or service.
+6. **Presentation: line charts, no quarter picker, no multi-quarter
+   table.** The Industry tab keeps the current-quarter table as is and
+   adds two quarterly line charts, 1984 to now: a balance-sheet chart and
+   an income-statement chart, one line per statement line (the same lines
+   as the table). Values show on hover. Quarters with missing coverage
+   are gaps in the line, never 0.
 
 ## Verified facts (FDIC API, index `risview_20261116221646`)
 
@@ -32,6 +39,9 @@ same way today (the Dacotah fixture goes back to 1984).
 | 1984Q4 server-side sums | ASSET 3,659,538,669 · LIAB 3,470,330,758 · EQTOT 188,812,545 · NETINCQ 3,459,189 ($ thousands) |
 | 1984Q4 identity | ASSET − (LIAB + EQTOT) is 0.011% of ASSET, which passes the 0.1% check |
 | Sample 1984 rows | All 18 statement fields are present, including SUBND, FREPP and IGLSECQ |
+| Coverage, sampled 1984Q4, 1985Q1, 1985Q2, 1988Q2, 1992Q2, 2026Q2 | Every field ≥ 99.5% of assets, except **ELNATQ (loan-loss provision) at about 72% in 1984Q4 to 1985Q2**: about 3,150 thrifts, including the largest S&Ls, report no provision. 1988Q2 is complete. 1985Q1 Q fields are complete (the semiannual concern applies only to YTD differencing) |
+| Insured US branches of foreign banks | 17 to 40 filers per quarter (e.g. Standard Chartered, Bank of China; BKCLASS OI or NC) have EQTOT NA, LIAB = ASSET and no income lines, because they file FFIEC 002 rather than a call report. They hold ~1% of assets in 2026, so counting them would put every income field below 0.995 every night. Rule in `field_coverage()`: EQTOT NA and LIAB = ASSET marks a branch, which is left out of the coverage weights. The rule matched exactly the NIMQ-NA banks in every sampled quarter |
+| Raw size | Measured 320 to 430 bytes per bank (zstd): ~5.7 MB for an 18k-bank quarter, 1.8 MB for 2026. About **550 MB** for 1984 to now |
 | `agg_by=RISDATE` | Works across a date range in one request. Gotcha: in aggregate output, `RISDATE` comes back as **epoch milliseconds** (e.g. `473299200000` = 1984-12-31), not `YYYYMMDD` |
 
 Full coverage for 1984 to 1990 is **not** verified yet. That is the job
@@ -51,13 +61,13 @@ What breaks or is silently wrong with 170+ quarters:
 
 | Where | Problem | Fix |
 |---|---|---|
-| `build.R:228` `all(ind$ASSET > 1e10)` | 1984 assets are $3.66T, so the $10T floor **fails the backfill** | Floor of $1T (`1e9`), plus the existing bank-count check |
-| `statements.R:166` `sum(..., na.rm = TRUE)` | A field no bank reported sums to 0, and a field half the banks reported sums to roughly half its real value. Both are silent | Coverage check, then NA when coverage is too low (below) |
-| `statements.R:8` `z()` | A missing component becomes 0, so its value ends up in "Other" | "Other" becomes NA when any of its components is NA (below) |
-| `pipeline.yml` upload step | Re-uploads **every** raw file with `--clobber` each night (170+ files) | Upload only the quarters pulled this run, plus `manifest.csv` and `revisions.csv` |
-| `build.R:168` `manifest.csv` | Overwritten with only this run's quarters, so the backfill rows are lost the next night | Merge into the existing manifest by `risdate` |
-| `build.R:236` 10% bank-count drop | Untested over 1984 to now (the S&L crisis had heavy attrition, but probably no more than 10% in one quarter) | Keep it. If it trips during the backfill, look at the quarter before loosening it |
-| No check for gaps | A missing raw file gives a hole in the history and no error | Check that the quarter sequence is unbroken from 19840331 to the newest quarter |
+| `build.R:228` `all(ind$ASSET > 1e10)` | 1984 assets are $3.66T, so the $10T floor **fails the backfill** | Floor of $1T (`1e9`), plus the existing bank-count check. **Done** |
+| `statements.R:166` `sum(..., na.rm = TRUE)` | A field no bank reported sums to 0, and a field half the banks reported sums to roughly half its real value. Both are silent | Coverage check, then NA when coverage is too low (below). **Done** |
+| `statements.R:8` `z()` | A missing component becomes 0, so its value ends up in "Other" | `z()` removed: a missing line, and any remainder or subtotal built from it, is NA. **Done** |
+| `pipeline.yml` upload step | Re-uploads **every** raw file with `--clobber` each night (170+ files) | Upload only the quarters pulled this run (files newer than a marker touched before `build.R`), plus `manifest.csv` and `revisions.csv`. **Done** |
+| `build.R:168` `manifest.csv` | Overwritten with only this run's quarters, so the backfill rows are lost the next night | Merge into the existing manifest by `risdate`; the workflow now downloads it. A check fails if the manifest lists a quarter with no raw file. **Done** |
+| `build.R:236` 10% bank-count drop | Untested over 1984 to now (the S&L crisis had heavy attrition, but probably no more than 10% in one quarter) | Keep it, applied only between adjacent quarters. If it trips during the backfill, look at the quarter before loosening it |
+| No check for gaps | A missing raw file gives a hole in the history and no error | Fail on any hole between the oldest raw file and the newest quarter. Starting later than 19840331 is reported, not failed, so nightly runs keep working until the backfill is done. **Done** |
 
 ## Field-coverage check
 
@@ -72,8 +82,9 @@ What breaks or is silently wrong with 170+ quarters:
 | `RISDATE` | quarter |
 | `field` | e.g. `NIMQ` |
 | `n_banks` | banks filing that quarter |
+| `n_branches` | of those, insured branches of foreign banks, left out of `asset_share` |
 | `n_reported` | banks with a non-NA value (a reported 0 counts as reported) |
-| `asset_share` | Σ ASSET of reporting banks ÷ Σ ASSET of all banks |
+| `asset_share` | Σ ASSET of reporting banks ÷ Σ ASSET of all banks, branches excluded from both (for ASSET itself: n_reported ÷ n_banks) |
 
 `asset_share` is the number that matters: it is the share of the
 industry total that is actually in the sum. A field missing for 2% of
@@ -85,8 +96,8 @@ share):
 - **Coverage at or above the minimum:** the mart holds the sum over the
   reporting banks, as today.
 - **Coverage below the minimum:** the mart holds **NA** for that field and
-  quarter. The table shows "–" and the footnote says the line was not
-  reported for that quarter.
+  quarter. The table shows "–", and the chart shows a gap. The chart
+  caption says a gap means the line is not covered for that quarter.
 - **"Other" lines** are remainders (`statement_lines`). If any component
   is NA, Other is NA, and it is never absorbed into Other. Totals (ASSET,
   LIAB, NETINCQ) still display.
@@ -119,6 +130,10 @@ share):
    are reported.
 
 ## Backfill plan and runtime
+
+For local testing, `build.R` also takes a comma list of quarters (e.g.
+`19841231,19880630`), plus the newest quarter. In that mode, holes are
+reported rather than failed.
 
 1. Add a `quarters` input to `pipeline.yml`'s `workflow_dispatch`
    (default 10, passed to `Rscript pipeline/build.R`). The one-time
@@ -154,39 +169,40 @@ limit. The consequences:
   × 21 columns, and `field_coverage` is about 3k rows. Both are a few KB,
   so the shinylive bundle barely changes.
 
-## Open questions (presentation)
+## Resolved questions
 
-1. **Table, charts, or both.** The options, smallest first:
-   - **(a) Quarter picker.** A `selectInput` of all quarters feeds the
-     existing `industry()` reactive. `statement_table()` is unchanged,
-     and the QoQ/YoY column keeps working, because the reactive already
-     selects the chosen quarter, the prior quarter and the same quarter a
-     year earlier. 1984 Q1 has no prior quarter, so its change column
-     shows "–". `statement_table()` already handles that.
-   - **(b) Multi-quarter table.** Columns are quarters, e.g. the last 8 or
-     a range. This reuses the **multi-bank path** of `statement_table()`
-     as is: pass a named list of quarter rows, one column each. That path
-     **drops the change column**, and the QoQ/YoY toggle greys out the
-     way the bank comparison does (`fs_cmp_enabled`). Change becomes
-     visible from column to column. In % mode each column uses its own
-     base (assets or revenue), which is correct.
-   - **(c) Charts.** One plotly line per statement line, 1984 to now,
-     $ or % of base. This needs a new plot builder. Coverage gaps must
-     appear as breaks in the line, never as a drop to zero.
-   - Recommendation: (a) first, then (c) for one selected line if wanted.
-     (b) is nearly free but is wide on mobile.
-2. **QoQ/YoY in a multi-quarter table**, if (b) is chosen: (i) no change
-   column, as in the multi-bank mode (recommended, zero code); (ii) a
-   change row under each line (doubles the height); or (iii) one change
-   column relative to the leftmost quarter (ambiguous). Needs a decision.
-3. **`COVERAGE_MIN`**: is 0.995 of assets the right threshold, or should
-   the app show partial sums with a coverage note instead of "–"?
-4. **Single-bank statements**: should the change to "Other" (NA when a
-   component is missing) apply to single banks as well? It is the same
-   function, and the honest answer is yes, but old single-bank quarters
-   would then show "–" where they show a number today.
-5. **Nominal dollars**: 1984 and 2026 dollars side by side. Inflation
-   adjustment is out of scope. Should there be a caption note?
+1. **Table, charts, or both:** charts, plus the current-quarter table as
+   is (decision 6). No quarter picker and no multi-quarter table.
+2. **QoQ/YoY in a multi-quarter table:** moot. The toggle still drives
+   the current-quarter table. The charts follow the $/% toggle: % of total
+   assets for the balance sheet, % of revenue for the income statement.
+3. **`COVERAGE_MIN`:** kept at 0.995 by asset share, with foreign-bank
+   branches out of the weights (see Verified facts). Below the minimum the
+   value is NA (a gap or "–"), not a partial sum with a note, which
+   follows the "gaps, never 0" decision. In the sample this only blanks
+   ELNATQ for 1984Q4 to 1985Q2, along with the income "Other" remainder
+   for those quarters (which depends on it). Net income itself still
+   shows.
+4. **Single banks:** yes, the same `statement_lines()` applies. The
+   Dacotah and First B&T fixture has no NA in any statement field across
+   all 340 quarters, so their statements are unchanged.
+5. **Nominal dollars:** no inflation adjustment. The chart caption says
+   "nominal dollars".
+
+## Still open for Daniel
+
+- **Run the backfill** after merge: Actions → Data pipeline → Run
+  workflow on main, `quarters = 171` (Q3 2026 is not past the 95% gate
+  yet, so 1984Q1 to 2026Q2 is 170 quarters, and either value works: the
+  pull stops at 1984Q1).
+- **Then tighten `smoke.R`** to `nrow(ind) >= 170` and an oldest row of
+  19840331. That isn't done yet because PR CI tests against the published
+  marts, which have 10 quarters until the backfill runs.
+- ELNATQ for 1984 to 1985 is a gap by design. If a partial sum with a
+  coverage note is preferred for that one line, it means changing the
+  rule, not the data.
+- Hover shows values. Permanent labels on every point would clutter 170
+  quarters, so there are none.
 
 ## Tests and acceptance criteria
 
@@ -207,13 +223,17 @@ limit. The consequences:
 
 **App (`smoke.R`, offline)**
 - `nrow(ind) >= 170`, the oldest row is 19840331, and the newest equals
-  the snapshot quarter (the existing check).
+  the snapshot quarter (the existing check). *Pending the backfill; see
+  above.*
 - `statement_table()` renders for the oldest quarter (no prior quarter,
   so the change column is "–") and for a quarter with a field forced to
   NA. That line shows "–", Other shows "–", and the totals still show.
 - `industry_totals()` unit test: a two-bank fixture with one NA in a field
   gives NA for that field when coverage is below the minimum, never a
   silent partial sum.
+
+- `industry_history()` builds in $ and %, and a quarter with a field
+  forced to NA is a gap in that line (no 0 values). *Done.*
 
 **Manual**
 - The Industry tab shows 1984 Q1 and the latest quarter. % mode adds to
