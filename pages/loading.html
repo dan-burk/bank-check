@@ -2,7 +2,8 @@
      RTutor's. The deploy workflow injects this before </body> of
      _site/index.html. It lives outside app/ because shinylive ships every
      file in the app folder to the browser.
-     A cartoon (clerk typing SQL, rows piling up) runs beside it until then.
+     Logo top-left; one centered column: the cartoon (clerk typing SQL, rows
+     piling up), then the progress bar, step message and one rotating joke.
      webR reports no real progress, so the bar moves on a timer and slows as
      it nears 95%. The overlay stays up until Shiny has connected inside the
      app iframe AND the app's own #boot_overlay (app.R) has removed itself,
@@ -10,21 +11,23 @@
 <style>
   #bc-loading {
     position: fixed; inset: 0; z-index: 9999; background: #F7F9FB;
-    display: flex; align-items: center; justify-content: center; gap: 48px;
+    display: flex; flex-direction: column; align-items: center;
+    /* safe: when taller than the screen, scroll from the top instead of clipping it */
+    justify-content: safe center;
     font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    padding: 0 16px; text-align: center; transition: opacity 0.6s; overflow-y: auto;
+    /* 96px clears the logo (16px inset + 64px icon) so the column never sits under it */
+    padding: 96px 16px; text-align: center; transition: opacity 0.6s; overflow-y: auto;
   }
-  #bc-main { display: flex; flex-direction: column; align-items: center; width: min(420px, 100%); }
-  #bc-loading img { width: 64px; height: 64px; margin-bottom: 10px; }
-  #bc-loading h1 { font-size: 28px; color: #1F2933; margin: 0 0 24px; font-weight: 600; }
-  #bc-bar { width: min(420px, 100%); height: 10px; background: #DEE2E6; border-radius: 5px; overflow: hidden; }
+  #bc-logo { position: absolute; top: 16px; left: 16px; display: flex; align-items: center; gap: 10px; }
+  #bc-loading img { width: 64px; height: 64px; }
+  #bc-loading h1 { font-size: 28px; color: #1F2933; margin: 0; font-weight: 600; }
+  #bc-bar { width: min(420px, 100%); margin-top: 18px; height: 10px; background: #DEE2E6; border-radius: 5px; overflow: hidden; }
   #bc-bar-fill { height: 100%; width: 2%; background: #2C5F8A; border-radius: 5px; transition: width 1s ease; }
   #bc-msg { margin-top: 14px; font-size: 17px; color: #1F2933; min-height: 1.4em; }
   #bc-joke { margin-top: 22px; font-size: 15px; color: #666; font-style: italic;
              max-width: 26rem; min-height: 3em; transition: opacity 0.4s; }
   #bc-note { margin-top: 18px; font-size: 14px; color: #666; max-width: 30rem; }
   #bc-note a { color: #2C5F8A; }
-  /* Cartoon (right side; below on narrow screens) */
   #bc-toon { display: flex; flex-direction: column; align-items: center; gap: 10px;
              width: min(30rem, 100%); }
   #bc-toon .headline { font-weight: 600; font-size: 17px; color: #1F2933; }
@@ -39,7 +42,6 @@
   #bc-toon .rows { white-space: pre; opacity: .85; }
   #bc-toon .count { font: 600 15px ui-monospace, Consolas, monospace; color: #2C5F8A;
                     font-variant-numeric: tabular-nums; }
-  #bc-toon .quip { color: #666; font-size: 15px; min-height: 2.6em; }
   /* Sweat: hidden until the query runs, then more drops as panic grows */
   #bc-toon .drop { fill: #7FB8E6; opacity: 0; }
   #bc-toon.run .d1, #bc-toon.p2 .d2, #bc-toon.p3 .d3 { animation: bc-drip 1.3s ease-in infinite; }
@@ -52,13 +54,10 @@
     20% { opacity: 1; } 100% { opacity: 0; transform: translateY(16px) scale(1.2); } }
   @keyframes bc-type { to { transform: translateY(2px); } }
   @keyframes bc-blink { 50% { opacity: 0; } }
-  /* Narrow screens: stack, cartoon below and smaller */
+  /* Narrow screens: smaller cartoon (the logo keeps its size) */
   @media (max-width: 860px) {
-    /* safe: when taller than the screen, scroll from the top instead of clipping it */
-    #bc-loading { flex-direction: column; justify-content: safe center; gap: 22px; padding: 28px 16px; }
-    #bc-main, #bc-toon { flex: none; }
     #bc-toon { gap: 6px; }
-    #bc-toon .headline, #bc-toon .quip { font-size: 14px; }
+    #bc-toon .headline { font-size: 14px; }
     #bc-toon svg { width: 90px; }
     #bc-toon .term { height: 6.2rem; font-size: 10px; }
   }
@@ -68,17 +67,9 @@
   }
 </style>
 <div id="bc-loading">
-  <div id="bc-main">
-    <img src="favicon.ico" alt="">
-    <h1>Bank Check</h1>
-    <div id="bc-bar"><div id="bc-bar-fill"></div></div>
-    <div id="bc-msg">Starting up...</div>
-    <div id="bc-joke"></div>
-    <!-- Empty until loading stalls; the timer below fills it -->
-    <div id="bc-note"></div>
-  </div>
+  <div id="bc-logo"><img src="favicon.ico" alt=""><h1>Bank Check</h1></div>
   <!-- Cartoon: a clerk typing SQL, then sweating as the rows pile up -->
-  <div id="bc-toon" role="status" aria-live="polite">
+  <div id="bc-toon">
     <div class="headline"></div>
     <div class="stage" aria-hidden="true">
       <svg viewBox="0 0 120 120">
@@ -100,8 +91,12 @@
       <div class="term"><div class="cmd"></div><div class="rows"></div></div>
     </div>
     <div class="count">0 rows</div>
-    <div class="quip"></div>
   </div>
+  <div id="bc-bar"><div id="bc-bar-fill"></div></div>
+  <div id="bc-msg" role="status" aria-live="polite">Starting up...</div>
+  <div id="bc-joke"></div>
+  <!-- Empty until loading stalls; the timer below fills it -->
+  <div id="bc-note"></div>
 </div>
 <script>
   (function () {
@@ -133,31 +128,15 @@
       "Dad, are we rich? No son, we are FDIC insured."
     ];
     // Cartoon: types the query, then rows scroll, the counter climbs and
-    // the sweat and quips get worse until the app is ready
+    // the sweat gets worse until the app is ready
     var toon = document.getElementById("bc-toon");
     var find = function (s) { return toon.querySelector(s); };
     var pick = function (a) { return a[Math.floor(Math.random() * a.length)]; };
     var EMOJI = ["\uD83D\uDE2B", "\uD83D\uDE33", "\uD83D\uDE31", "\uD83D\uDE35"];
-    var QUIPS = [
-      "Counting 17,949 banks by hand...",
-      "Bribing the FDIC intern with donuts...",
-      "Faxing 1984 for its call reports...",
-      "Rewinding the microfiche...",
-      "Asking Savings & Loan what happened...",
-      "Reconciling a quarter that was restated twice...",
-      "Explaining JOIN to a 1984 mainframe...",
-      "Adding up $24 trillion. Carry the one...",
-      "Paging past the 10,000-row limit. Again."
-    ];
     var SQL = "SELECT * FROM all_banks WHERE year >= 1984;";
     var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    var toonTimers = [], n = 0, c = 0, q = Math.floor(Math.random() * QUIPS.length);
+    var toonTimers = [], n = 0, c = 0;
     find(".headline").textContent = "Really? You're going to have me pull ALL data since 1984? " + pick(EMOJI);
-    find(".quip").textContent = QUIPS[q];
-    toonTimers.push(setInterval(function () {
-      q = (q + 1) % QUIPS.length;
-      find(".quip").textContent = QUIPS[q] + " " + pick(EMOJI);
-    }, 2600));
     function row() {   // fake call-report row: cert | quarter end | assets ($000)
       return ("     " + (1 + Math.floor(Math.random() * 59999))).slice(-5) + " | " +
         (1984 + Math.floor(Math.random() * 42)) + ["0331", "0630", "0930", "1231"][n % 4] + " | " +
