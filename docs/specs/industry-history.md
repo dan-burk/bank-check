@@ -75,7 +75,8 @@ What breaks or is silently wrong with 170+ quarters:
 `industry_totals()`.
 
 **Output:** a new small mart, `field_coverage.parquet`, with one row per
-(quarter, field) for the 18 statement fields. That is about 3,100 rows.
+(quarter, field) for the `STATEMENT_FIELDS` (18 at first; 20 since P3LNLS and
+NCLNLS were added for the Delinquency chart's industry lines).
 
 | Column | Meaning |
 |---|---|
@@ -212,7 +213,7 @@ limit. The consequences:
 - 1984Q4 row: `n_banks` = 17,949, ASSET = 3,659,538,669, and NETINCQ =
   3,459,189 if it meets `COVERAGE_MIN` (or NA with the coverage reported).
   The aggregation cross-check matches for every quarter.
-- `field_coverage` has 18 rows per quarter. Every field is ≥
+- `field_coverage` has one row per `STATEMENT_FIELDS` field per quarter. Every field is ≥
   `COVERAGE_MIN` in the last 10 quarters.
 - No mart value is a sum taken over coverage below `COVERAGE_MIN`.
   Checked by joining the mart to `field_coverage`: where coverage is
