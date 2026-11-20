@@ -23,6 +23,8 @@ env:
 
 jobs:
   refresh:
+    # Pushes to git and starts a deploy, so a manual run from another branch must not
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
