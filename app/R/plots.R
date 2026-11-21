@@ -610,15 +610,51 @@ industry_history <- function(long, section, unit = "usd") {
     long$y <- long$value / sc$div; y_title <- sc$word
     fmt <- paste0("$%{y:,.1f}", sc$letter)
   }
+  # Legend order. The first group is drawn; the rest start hidden
+  # (legendonly), one click away. Group names are the legend titles.
+  groups <- if (section == "bs") list(
+    Totals = c("Total assets", "Total liabilities", "Equity (owners)"),
+    Assets = c("Loans", "− Allowance*", "Bonds", "Cash", "Other assets"),
+    Liabilities = c("Deposits", "Borrowings", "Other liabilities")
+  ) else list(
+    Totals = c("Revenue", "Expenses", "Loan loss provision", "Net income"),
+    `Revenue detail` = c("Interest earned − paid", "Fees"),
+    `Other items` = c("Bond gains/losses", "Taxes", "Other")
+  )
+  stopifnot(setequal(unlist(groups), unique(long$label)))
+  # Legend names carry the operator that builds the total (statement_lines).
+  # Chart only: the tables keep the plain statement labels.
+  legend <- c(
+    "Loans" = "+ Loans", "− Allowance*" = "− Allowance", "Bonds" = "+ Bonds",
+    "Cash" = "+ Cash", "Other assets" = "+ Other assets",
+    "Total assets" = "= Total assets",
+    "Deposits" = "+ Deposits", "Borrowings" = "+ Borrowings",
+    "Other liabilities" = "+ Other liabilities",
+    "Total liabilities" = "= Total liabilities",
+    "Equity (owners)" = "= Equity (assets − liabilities)",
+    "Interest earned − paid" = "+ Net interest (earned − paid)", "Fees" = "+ Fees",
+    "Revenue" = "+ Revenue", "Expenses" = "− Expenses",
+    "Loan loss provision" = "− Loan loss provision",
+    "Bond gains/losses" = "+ Bond gains/losses", "Taxes" = "− Taxes",
+    "Other" = "+ Other", "Net income" = "= Net income"
+  )
+  # Subtracted lines are stored negative; draw the positive amount
+  flip <- c("− Allowance*", "Expenses", "Loan loss provision", "Taxes")
   p <- plotly::plot_ly()
-  for (lb in unique(long$label)) {
+  for (g in names(groups)) for (lb in groups[[g]]) {
     s <- style[[lb]]
     d <- long[long$label == lb, ]
-    p <- plotly::add_trace(p, data = d, x = ~date, y = ~y, name = lb,
+    nm <- legend[[lb]]
+    if (lb %in% flip) d$y <- -d$y
+    p <- plotly::add_trace(p, data = d, x = ~date, y = ~y, name = nm,
       type = "scatter", mode = "lines", connectgaps = FALSE,
+      visible = if (g == "Totals") TRUE else "legendonly",
+      legendgroup = g,
+      legendgrouptitle = if (lb == groups[[g]][1]) list(text = g),
       line = list(color = s[1], width = if (length(s) > 1) 2.5 else 1.5,
                   dash = if (length(s) > 1) s[2] else "solid"),
-      hovertemplate = paste0(lb, ": ", fmt, "<extra></extra>"))
+      hovertemplate = paste0(nm, ": ", fmt, "<extra></extra>"))
   }
-  base_layout(p, y_title) |> range_buttons()
+  base_layout(p, y_title) |> range_buttons() |>
+    plotly::layout(legend = list(groupclick = "toggleitem"))
 }

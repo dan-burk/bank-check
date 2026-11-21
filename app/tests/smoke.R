@@ -141,11 +141,44 @@ ind_long <- industry_long(ind)
 for (sec in c("bs", "is")) for (u in c("usd", "pct")) {
   ok(paste("industry_history", sec, u), industry_history(ind_long, sec, u))
 }
-bt <- Filter(function(t) identical(t$name, "Bonds"),
+bt <- Filter(function(t) identical(t$name, "+ Bonds"),
              plotly::plotly_build(industry_history(industry_long(ind_gap), "bs"))$x$data)[[1]]
 by <- unlist(bt$y)
 stopifnot(sum(!is.na(by)) == sum(!is.na(ind$SC)) - 1, !any(by == 0, na.rm = TRUE))
 cat("ok: missing coverage is NA (\"–\" in tables, gaps in charts), never 0\n")
+# Only the totals are drawn, listed first; every legend name has its
+# operator; subtracted lines are drawn positive, swing lines keep their sign
+for (u in c("usd", "pct")) {
+  tr <- plotly::plotly_build(industry_history(ind_long, "is", u))$x$data
+  shown <- vapply(tr, function(t) isTRUE(t$visible), TRUE)
+  stopifnot(identical(vapply(tr[shown], `[[`, "", "name"),
+                      c("+ Revenue", "− Expenses", "− Loan loss provision", "= Net income")),
+            all(vapply(tr[!shown], `[[`, "", "visible") == "legendonly"))
+  bs <- plotly::plotly_build(industry_history(ind_long, "bs", u))$x$data
+  stopifnot(identical(vapply(Filter(function(t) isTRUE(t$visible), bs), `[[`, "", "name"),
+                      c("= Total assets", "= Total liabilities", "= Equity (assets − liabilities)")),
+            length(bs) == 11)
+  for (t in c(tr, bs)) stopifnot(substr(t$name, 1, 1) %in% c("+", "−", "="),
+                                 !grepl("subtracted|\\*", t$name),
+                                 startsWith(t$hovertemplate[1], paste0(t$name, ": ")))
+  for (sec in c("is", "bs")) {
+    l <- ind_long[ind_long$section == sec, ]
+    div <- if (u == "pct") 1 else usd_axis_unit(l$value)$div
+    trs <- if (sec == "is") tr else bs
+    chk <- if (sec == "bs") c(`− Allowance` = "− Allowance*") else
+      c(`− Expenses` = "Expenses", `− Loan loss provision` = "Loan loss provision",
+        `− Taxes` = "Taxes", `+ Bond gains/losses` = "Bond gains/losses", `+ Other` = "Other")
+    for (nm in names(chk)) {
+      y <- unlist(Filter(function(t) t$name == nm, trs)[[1]]$y)
+      want <- l[l$label == chk[[nm]], if (u == "pct") "pct" else "value"] / div
+      if (substr(nm, 1, 1) == "−") want <- -want
+      stopifnot(isTRUE(all.equal(as.numeric(y[!is.na(y)]), want[!is.na(want)])))   # plotly drops leading NA points
+    }
+  }
+  ex <- unlist(Filter(function(t) t$name == "− Expenses", tr)[[1]]$y)
+  stopifnot(all(ex > 0, na.rm = TRUE))
+}
+cat("ok: industry history shows only totals; operators in names; subtracted drawn positive\n")
 
 # industry_long() (one vectorized statement_lines() call) equals the old
 # per-quarter loop, NA gaps and quarters missing from the mart included
