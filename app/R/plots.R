@@ -622,14 +622,30 @@ industry_history <- function(long, section, unit = "usd") {
     `Other items` = c("Bond gains/losses", "Taxes", "Other")
   )
   stopifnot(setequal(unlist(groups), unique(long$label)))
-  # Drawn as the positive amount subtracted, not as a negative line
-  flip <- c("Expenses", "Loan loss provision")
+  # Legend names carry the operator that builds the total (statement_lines).
+  # Chart only: the tables keep the plain statement labels.
+  legend <- c(
+    "Loans" = "+ Loans", "− Allowance*" = "− Allowance", "Bonds" = "+ Bonds",
+    "Cash" = "+ Cash", "Other assets" = "+ Other assets",
+    "Total assets" = "= Total assets",
+    "Deposits" = "+ Deposits", "Borrowings" = "+ Borrowings",
+    "Other liabilities" = "+ Other liabilities",
+    "Total liabilities" = "= Total liabilities",
+    "Equity (owners)" = "= Equity (assets − liabilities)",
+    "Interest earned − paid" = "+ Net interest (earned − paid)", "Fees" = "+ Fees",
+    "Revenue" = "+ Revenue", "Expenses" = "− Expenses",
+    "Loan loss provision" = "− Loan loss provision",
+    "Bond gains/losses" = "+ Bond gains/losses", "Taxes" = "− Taxes",
+    "Other" = "+ Other", "Net income" = "= Net income"
+  )
+  # Subtracted lines are stored negative; draw the positive amount
+  flip <- c("− Allowance*", "Expenses", "Loan loss provision", "Taxes")
   p <- plotly::plot_ly()
   for (g in names(groups)) for (lb in groups[[g]]) {
     s <- style[[lb]]
     d <- long[long$label == lb, ]
-    nm <- lb
-    if (lb %in% flip) { d$y <- -d$y; nm <- paste(lb, "(subtracted)") }
+    nm <- legend[[lb]]
+    if (lb %in% flip) d$y <- -d$y
     p <- plotly::add_trace(p, data = d, x = ~date, y = ~y, name = nm,
       type = "scatter", mode = "lines", connectgaps = FALSE,
       visible = if (g == "Totals") TRUE else "legendonly",

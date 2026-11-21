@@ -294,11 +294,15 @@ ui <- page_navbar(
     ),
     # Every quarter in the mart; follows the $/% toggle above
     card(card_header("Balance sheet over time"),
-         plotlyOutput("ind_bs_plot", height = "420px")),
+         plotlyOutput("ind_bs_plot", height = "420px"),
+         div(class = "text-muted small",
+             "Quarter-end, nominal dollars. The allowance (−) is drawn as a positive amount.")),
     card(card_header("Income statement over time"),
          plotlyOutput("ind_is_plot", height = "420px"),
          div(class = "text-muted small",
-             "Quarterly, nominal dollars. A gap means FDIC data does not cover that line for that quarter."))
+             "Quarterly, nominal dollars. Subtracted (−) items are drawn as positive amounts.",
+             "Bond gains/losses and Other keep their sign: above zero added to net income, below zero cut it.",
+             "A gap means FDIC data does not cover that line for that quarter."))
   ),
 
   nav_panel("Capital", ui_explorer("cap", EXPLORERS$cap$groups, EXPLORERS$cap$default)),

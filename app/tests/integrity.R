@@ -426,14 +426,17 @@ for (i in which(!is.na(FIELDS_META$ind_num))) {
 cat("industry lines checked:", n_ind, "\n")
 
 # Industry tab history charts, the lines drawn by default, % mode, from
-# the raw summed columns. Expenses and provision are drawn positive.
+# the raw summed columns, plus the subtracted lines (drawn positive) and
+# the sign-swinging bond gains/losses.
 rev_q <- at(ind$NIMQ + ind$NONIIQ, qe)
 rev_q[!(rev_q > 0)] <- NA
 asset_q <- at(ind$ASSET, qe)
 ih <- list(
-  is = list(`Expenses (subtracted)` = "NONIXQ",
-            `Loan loss provision (subtracted)` = "ELNATQ", `Net income` = "NETINCQ"),
-  bs = list(`Total liabilities` = "LIAB", `Equity (owners)` = "EQTOT"))
+  is = list(`− Expenses` = "NONIXQ", `− Loan loss provision` = "ELNATQ",
+            `− Taxes` = "ITAXQ", `+ Bond gains/losses` = "IGLSECQ",
+            `= Net income` = "NETINCQ"),
+  bs = list(`= Total liabilities` = "LIAB", `= Equity (assets − liabilities)` = "EQTOT",
+            `− Allowance` = "LNATRES"))
 for (sec in names(ih)) {
   tr <- built_traces(industry_history(industry_long(ind), sec, "pct"))
   base <- if (sec == "is") rev_q else asset_q
