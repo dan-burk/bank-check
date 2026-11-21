@@ -359,10 +359,11 @@ risk_cushion <- function(df, mode = "pct", df2 = NULL,
 # twin, summed dollars / summed gross loans (never a mean of bank ratios).
 # Percent only, so no dollar rescaling. Hidden when df2 is set (nine lines
 # is too many). A mart built before P3LNLS/NCLNLS were summed just skips
-# those two lines.
+# those two lines. df = NULL (no bank picked) draws the industry lines alone,
+# full-strength instead of faded.
 pipeline_lines <- function(df, df2 = NULL, from_date = as.Date("2019-01-01"),
                            ind = NULL) {
-  banks <- if (is.null(df2)) list(df) else list(df, df2)
+  banks <- if (is.null(df)) list() else if (is.null(df2)) list(df) else list(df, df2)
   series <- list(
     list(col = "p3_pct",   name = "30-89 days late", color = COL_EARLY, ind = "P3LNLS"),
     list(col = "NCLNLSR",  name = "Noncurrent",      color = COL_ALERT, ind = "NCLNLS"),
@@ -401,8 +402,9 @@ pipeline_lines <- function(df, df2 = NULL, from_date = as.Date("2019-01-01"),
       p <- plotly::add_trace(
         p, x = ii$date, y = round(100 * ii[[s$ind]] / ii$LNLSGR, 2),
         name = paste0(s$name, " - All banks"),
-        type = "scatter", mode = "lines", opacity = 0.5,
-        line = list(color = s$color, width = 1.5, dash = "dash"),
+        type = "scatter", mode = "lines", opacity = if (is.null(df)) 1 else 0.5,
+        line = list(color = s$color, width = if (is.null(df)) 2 else 1.5,
+                    dash = if (is.null(df)) "solid" else "dash"),
         hovertemplate = "%{y}%"
       )
     }

@@ -194,7 +194,12 @@ stopifnot(!any(grepl("All banks", pl_names(pipeline_lines(dac, df2 = fbt, ind = 
           identical(grep("All banks", pl_names(pipeline_lines(
             dac, ind = ind[setdiff(names(ind), c("P3LNLS", "NCLNLS"))])), value = TRUE),
             "Allowance - All banks"))
-cat("ok: pipeline_lines industry lines (columns present, absent, hidden with df2)\n")
+# No bank: the same three industry lines alone, same values, solid
+pl0 <- plotly::plotly_build(pipeline_lines(NULL, ind = ind_dq))$x$data
+stopifnot(identical(vapply(pl0, `[[`, "", "name"), ind_lines),
+          identical(lapply(pl0, `[[`, "y"), lapply(pl[4:6], `[[`, "y")),
+          all(vapply(pl0, function(t) t$line$dash, "") == "solid"))
+cat("ok: pipeline_lines industry lines (columns present, absent, hidden with df2, no bank)\n")
 ok("risk_cushion pct", risk_cushion(dac))
 ok("risk_cushion usd", risk_cushion(dac, mode = "usd"))
 ok("risk_cushion pct df2", risk_cushion(dac, df2 = fbt))
@@ -267,6 +272,13 @@ shiny::testServer(app = "app", {
   stopifnot(!is.null(err),
             grepl("Search for a bank", conditionMessage(err)))
   cat("ok: empty state before any pick\n")
+  # ...except the Delinquency chart, which shows the industry lines alone
+  pp <- jsonlite::fromJSON(output$pipeline_plot, simplifyVector = FALSE)
+  pp_names <- vapply(pp$x$data, `[[`, "", "name")
+  # Allowance always; the other two only if the mart has P3LNLS/NCLNLS
+  stopifnot("Allowance - All banks" %in% pp_names, all(grepl("- All banks$", pp_names)),
+            grepl("All FDIC-insured banks", output$pipeline_note$html))
+  cat("ok: pipeline_plot industry-only before any pick\n")
 
   traj_picks <- as.character(head(FAIL_META$CERT, 3))
   session$setInputs(

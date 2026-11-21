@@ -362,6 +362,7 @@ stopifnot(max(ind$RISDATE) == XS_RISDATE)
 iw <- ind[ind$RISDATE >= 20190101, ]
 ikeys <- as.Date(as.character(iw$RISDATE), "%Y%m%d")
 pl_ind <- built_traces(pipeline_lines(xs[xs$CERT == roster$CERT[1], ], ind = ind))
+pl_ind0 <- built_traces(pipeline_lines(NULL, ind = ind))   # no bank picked
 for (s in list(c("30-89 days late", "P3LNLS"), c("Noncurrent", "NCLNLS"),
                c("Allowance", "LNATRES"))) {
   nm <- paste(s[1], "- All banks")
@@ -370,6 +371,8 @@ for (s in list(c("30-89 days late", "P3LNLS"), c("Noncurrent", "NCLNLS"),
     next
   }
   expect_trace(nm, pl_ind, nm, ikeys, round(100 * iw[[s[2]]] / iw$LNLSGR, 2))
+  expect_trace(paste(nm, "(no bank)"), pl_ind0, nm, ikeys,
+               round(100 * iw[[s[2]]] / iw$LNLSGR, 2))
   tr <- Filter(function(t) identical(t$name, nm), pl_ind)[[1]]
   expect_near(paste(nm, "newest vs raw cross-section"),
               utils::tail(num_y(tr$y), 1),
