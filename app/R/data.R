@@ -156,6 +156,55 @@ snapshot_institutions <- function(snap) {
 # Every FDIC-insured bank combined, one row per quarter, newest first
 load_industry <- function() read_mart("industry_quarterly")
 
+# "All banks" line: every FDIC-insured bank combined, summed num / summed
+# den from the industry_quarterly mart, never a mean of bank ratios. num
+# may be arithmetic on mart columns ("SCAF - SCAA + SCHF - SCHA"). scale:
+#   "pct"     100 * num / den
+#   "x"       num / den
+#   "ann_q"   quarterly flow x 4, over the mean of this and the prior
+#             quarter-end den (FDIC uses daily averages: an approximation)
+#   "ann_ytd" year-to-date flow x 4/q, over the mean of the quarter-ends
+#             from the prior Dec 31 on (FDIC's own method for ROA and ROE)
+# Returns data.frame(date, y), oldest first, non-finite y as NA; NULL when
+# the mart lacks a column (built before that field was summed).
+industry_series <- function(ind, num, den, scale = "pct") {
+  if (is.null(ind) || is.na(num) || is.na(den)) return(NULL)
+  ex <- str2lang(num)
+  if (!all(c(all.vars(ex), den) %in% names(ind))) return(NULL)
+  ind <- ind[order(ind$RISDATE), ]
+  rd <- as.integer(ind$RISDATE)
+  n <- as.numeric(eval(ex, ind))
+  d <- as.numeric(ind[[den]])
+  if (scale %in% c("ann_q", "ann_ytd")) {
+    k <- if (scale == "ann_q") rep(1L, length(rd)) else rd %% 10000L %/% 300L
+    # Mean of the k + 1 quarter-ends ending at each quarter; NA if any is
+    # missing from the mart
+    d <- vapply(seq_along(rd), function(i) {
+      q <- rd[i]
+      for (j in seq_len(k[i])) q <- c(q, prev_quarter_end(q[length(q)]))
+      mean(d[match(q, rd)])
+    }, 0)
+    n <- n * 4 / k
+  }
+  y <- (if (scale == "x") 1 else 100) * n / d
+  data.frame(date = as.Date(as.character(rd), "%Y%m%d"),
+             y = ifelse(is.finite(y), y, NA_real_))
+}
+
+# The "All banks" line for a fields_meta metric as the chart displays it,
+# or NULL (no ind_num, a mart column missing, or a dollar metric in $
+# mode: summed industry dollars on a bank's axis would flatten the bank).
+# Dollar metrics divide by assets or gross loans, like the bank line.
+industry_metric <- function(code, meta, ind, display = "level") {
+  row <- meta[meta$code == code, ]
+  if (nrow(row) == 0 || is.null(row$ind_num) || is.na(row$ind_num[1])) return(NULL)
+  if (row$units[1] == "usd_k") {
+    den <- c(pct_assets = "ASSET", pct_loans = "LNLSGR")[display]
+    return(if (is.na(den)) NULL else industry_series(ind, row$ind_num[1], den))
+  }
+  industry_series(ind, row$ind_num[1], row$ind_den[1], row$ind_scale[1])
+}
+
 # Quarter label ("2026 Q2") for whichever cross-section actually loaded, so
 # a legend can never name a quarter the data behind it is not from.
 xs_quarter_label <- function(xs) {

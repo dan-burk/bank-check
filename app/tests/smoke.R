@@ -200,6 +200,73 @@ stopifnot(identical(vapply(pl0, `[[`, "", "name"), ind_lines),
           identical(lapply(pl0, `[[`, "y"), lapply(pl[4:6], `[[`, "y")),
           all(vapply(pl0, function(t) t$line$dash, "") == "solid"))
 cat("ok: pipeline_lines industry lines (columns present, absent, hidden with df2, no bank)\n")
+
+# industry_series on a hand-computed mini mart (newest first, like the mart)
+mm <- data.frame(RISDATE = c(20241231L, 20240930L, 20240630L, 20240331L, 20231231L),
+                 ASSET = c(140, 130, 120, 110, 100), LNLSGR = 50,
+                 NETINC = c(4, 3, 2, 1, 9), NETINCQ = c(1, 1, 1, 1, 2),
+                 SCAF = 8, SCAA = 10, SCHF = 4, SCHA = 5)
+s_at <- function(s, rd) s$y[s$date == as.Date(as.character(rd), "%Y%m%d")]
+stopifnot(
+  isTRUE(all.equal(s_at(industry_series(mm, "NETINC", "ASSET", "ann_ytd"), 20240630),
+                   100 * 2 * 4 / 2 / mean(c(100, 110, 120)))),
+  isTRUE(all.equal(s_at(industry_series(mm, "NETINC", "ASSET", "ann_ytd"), 20241231),
+                   100 * 4 / mean(c(100, 110, 120, 130, 140)))),
+  isTRUE(all.equal(s_at(industry_series(mm, "NETINCQ", "ASSET", "ann_q"), 20240331),
+                   100 * 4 / mean(c(110, 100)))),
+  is.na(s_at(industry_series(mm, "NETINCQ", "ASSET", "ann_q"), 20231231)),  # no prior quarter
+  is.na(s_at(industry_series(mm[-3, ], "NETINC", "ASSET", "ann_ytd"), 20240930)),  # hole: NA, not a shorter mean
+  isTRUE(all.equal(s_at(industry_series(mm, "LNLSGR", "ASSET", "x"), 20241231), 50 / 140)),
+  isTRUE(all.equal(s_at(industry_series(mm, "SCAF - SCAA + SCHF - SCHA", "ASSET"), 20241231),
+                   100 * -3 / 140)),
+  is.null(industry_series(mm, "NCLNLS", "LNLSGR")),         # column not in the mart
+  is.null(industry_series(NULL, "ASSET", "ASSET")),
+  !is.unsorted(industry_series(mm, "ASSET", "LNLSGR")$date))
+# Every fields_meta industry formula names summed fields and a known scale
+SF <- strsplit(STATEMENT_FIELDS, ",")[[1]]
+im <- FIELDS_META[!is.na(FIELDS_META$ind_num), ]
+for (i in seq_len(nrow(im))) {
+  v <- c(all.vars(str2lang(im$ind_num[i])), stats::na.omit(im$ind_den[i]))
+  if (!all(v %in% SF)) stop(im$code[i], ": industry fields not summed: ", setdiff(v, SF))
+  stopifnot(if (im$units[i] == "usd_k") is.na(im$ind_den[i]) else
+              im$ind_scale[i] %in% c("pct", "x", "ann_q", "ann_ytd"))
+}
+cat("ok: industry_series (pct, x, ann_q, ann_ytd, formula, gaps, missing columns)\n")
+
+# metric_ts "All banks" line. ind_full = the mart with any field it predates
+# filled in, so the drawing is tested whatever mart is on disk.
+ind_full <- ind
+for (f in setdiff(SF, names(ind_full))) ind_full[[f]] <- 0.01 * ind_full$ASSET
+for (code in im$code) {
+  for (disp in if (FIELDS_META$units[FIELDS_META$code == code] == "usd_k")
+                 c("level", "pct_assets", "pct_loans") else "level") {
+    iv <- industry_metric(code, FIELDS_META, ind_full, disp)
+    stopifnot(is.null(iv) == (disp == "level" &&
+                              FIELDS_META$units[FIELDS_META$code == code] == "usd_k"))
+    tr <- plotly::plotly_build(metric_ts(banks, code, FIELDS_META, cols, disp,
+                                         peer_for(code, PEER), ind = iv))$x$data
+    stopifnot(sum(vapply(tr, function(t) identical(t$name, "All banks"), NA)) == !is.null(iv))
+  }
+}
+iv <- industry_metric("NCLNLSR", FIELDS_META, ind_full)
+# Values matched on x: plotly prunes leading/trailing NA points
+trace_at <- function(tr) {
+  y <- vapply(tr$y, function(v) if (is.null(v)) NA_real_ else v, 0)
+  stats::setNames(y, as.character(as.Date(unlist(tr$x))))
+}
+f15 <- fbt[fbt$date >= as.Date("2015-01-01"), ]
+tr <- Filter(function(t) identical(t$name, "All banks"), plotly::plotly_build(
+  metric_ts(list(F = f15), "NCLNLSR", FIELDS_META, c(F = "#000"), ind = iv))$x$data)[[1]]
+got <- trace_at(tr)
+stopifnot(identical(tr$line$dash, "dash"),
+          min(as.Date(names(got))) == min(f15$date),                 # clipped to the bank's span
+          isTRUE(all.equal(unname(got), round(iv$y[match(as.Date(names(got)), iv$date)], 2))))
+tr0 <- plotly::plotly_build(metric_ts(list(), "NCLNLSR", FIELDS_META, NULL, ind = iv))$x$data
+got0 <- trace_at(tr0[[1]])
+stopifnot(length(tr0) == 1, identical(tr0[[1]]$line$dash, "solid"),
+          max(as.Date(names(got0))) == max(iv$date),                  # alone: full history
+          all(iv$date[is.finite(iv$y)] %in% as.Date(names(got0))))
+cat("ok: metric_ts All banks line (every metric, $ mode hidden, clipped, alone)\n")
 ok("risk_cushion pct", risk_cushion(dac))
 ok("risk_cushion usd", risk_cushion(dac, mode = "usd"))
 ok("risk_cushion pct df2", risk_cushion(dac, df2 = fbt))
@@ -279,6 +346,26 @@ shiny::testServer(app = "app", {
   stopifnot("Allowance - All banks" %in% pp_names, all(grepl("- All banks$", pp_names)),
             grepl("All FDIC-insured banks", output$pipeline_note$html))
   cat("ok: pipeline_plot industry-only before any pick\n")
+  # Explorers and Sensitivity: the industry line alone, prompt in the
+  # footnote; a metric with no industry line (Tier 1) keeps the prompt on
+  # the chart. A mart predating a metric's fields falls back to the prompt.
+  session$setInputs(earn_metric = "ROA", cap_metric = "RBC1AAJ")
+  no_bank <- function(plot, caveat, needs) {
+    if (all(needs %in% names(ind))) {
+      pj <- jsonlite::fromJSON(output[[plot]], simplifyVector = FALSE)
+      stopifnot(identical(vapply(pj$x$data, `[[`, "", "name"), "All banks"),
+                grepl("All FDIC-insured banks", output[[caveat]]$html))
+    } else {
+      e <- tryCatch({ output[[plot]]; NULL }, error = function(e) e)
+      stopifnot(grepl("Search for a bank", conditionMessage(e)))
+    }
+  }
+  no_bank("earn_plot", "earn_caveat", c("NETINC", "ASSET"))
+  no_bank("sens_plot", "sens_caveat", c("SCAF", "SCAA", "SCHF", "SCHA", "EQ"))
+  e <- tryCatch({ output$cap_plot; NULL }, error = function(e) e)
+  stopifnot(grepl("Search for a bank", conditionMessage(e)),
+            !grepl("All banks", output$cap_caveat$html))
+  cat("ok: explorers and sens_plot industry-only before any pick\n")
 
   traj_picks <- as.character(head(FAIL_META$CERT, 3))
   session$setInputs(
@@ -309,6 +396,21 @@ shiny::testServer(app = "app", {
   # in a shipped file, so assert against what bank_label() actually yields
   stopifnot(!is.null(cmp()), cmp()$label[1] == bank_label(3973, inst))
   cat("comparison bank active: yes\n")
+
+  # With banks: the earnings explorer adds the All banks line (if the mart
+  # has the fields) and keys it in the footnote; $ mode drops it
+  ej <- jsonlite::fromJSON(output$earn_plot, simplifyVector = FALSE)
+  has_roa <- all(c("NETINC", "ASSET") %in% names(ind))
+  stopifnot(("All banks" %in% vapply(ej$x$data, function(t) t$name %||% "", "")) == has_roa,
+            grepl("All banks\\*", output$earn_caveat$html) == has_roa)
+  session$setInputs(liq_metric = "DEPUNINS", liq_display = "level")
+  lj <- jsonlite::fromJSON(output$liq_plot, simplifyVector = FALSE)
+  stopifnot(!"All banks" %in% vapply(lj$x$data, function(t) t$name %||% "", ""))
+  session$setInputs(liq_display = "pct_assets")
+  lj <- jsonlite::fromJSON(output$liq_plot, simplifyVector = FALSE)
+  stopifnot(("All banks" %in% vapply(lj$x$data, function(t) t$name %||% "", "")) ==
+              ("DEPUNINS" %in% names(ind)))
+  cat("ok output: explorer All banks line with banks; hidden in $ mode\n")
 
   session$setInputs(fs_unit = "pct", fs_cmp = "yoy")
   stopifnot(grepl("% of total assets", output$bs_table$html, fixed = TRUE),

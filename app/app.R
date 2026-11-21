@@ -54,7 +54,10 @@ asset <- function(file) {
 # for whatever reference lines the chart actually drew (threshold_layers in
 # plots.R), then one starred definition per unfamiliar term (the `stars`
 # column, pipe-separated). No line drawn, no swatch: nothing to key.
-metric_footnote <- function(code) {
+# ind = the chart drew the "All banks" line: keyed, with its own starred
+# definition; with no bank picked the screen's prompt sits here instead of
+# on the chart (as on the Delinquency chart).
+metric_footnote <- function(code, ind = FALSE, no_bank = FALSE) {
   row <- FIELDS_META[FIELDS_META$code == code, ]
   if (nrow(row) == 0) return(NULL)
   parts <- c(row$formula[1], row$caveat[1])
@@ -78,12 +81,30 @@ metric_footnote <- function(code) {
                                      " (band: middle 50%)"))
     }
   }
+  if (ind) {
+    swatches[[length(swatches) + 1]] <-
+      line_swatch(COL_FG, "All banks*", if (no_bank) "solid" else "dashed")
+  }
+  scale <- row$ind_scale[1]
+  ind_star <- if (ind) star_line(paste0(
+    "All banks: every FDIC-insured bank combined, their dollars summed ",
+    "and then divided, so the largest banks dominate it and it can sit ",
+    "outside the peer band, where each bank counts once",
+    if (identical(scale, "ann_q")) paste0(
+      ". Its average assets are the mean of two quarter-ends, close to but ",
+      "not exactly FDIC's daily average"),
+    if (identical(scale, "ann_ytd")) paste0(
+      ". Annualized from year-to-date dollars over the average of the ",
+      "quarter-ends since the prior year-end")))
 
   tagList(
+    if (ind && no_bank) div(tags$strong("All FDIC-insured banks"),
+                            " (combined). ", EMPTY_MSG),
     if (!is.null(text)) div(text),
     if (length(swatches) > 0)
       div(class = "d-flex flex-wrap align-items-center mt-1", swatches),
-    star_lines(row$stars[1])
+    star_lines(row$stars[1]),
+    ind_star
   )
 }
 
@@ -113,11 +134,13 @@ mode_header <- function(title, input_id) {
                            choices = c("%" = "pct", "$" = "usd")))
 }
 
-# Dotted-line swatch matching threshold_layers() in plots.R, for legends
-line_swatch <- function(color, label) {
+# Line swatch for footnote keys: dotted matches threshold_layers() in
+# plots.R; dashed/solid the "All banks" line
+line_swatch <- function(color, label, style = "dotted") {
   span(class = "me-3 text-nowrap d-inline-flex align-items-center",
        span(style = paste0("display:inline-block; width:20px; height:0; ",
-                           "border-top:2px dotted ", color, "; margin-right:5px;")),
+                           "border-top:2px ", style, " ", color,
+                           "; margin-right:5px;")),
        label)
 }
 
@@ -675,18 +698,35 @@ server <- function(input, output, session) {
       g <- FIELDS_META$group[FIELDS_META$code == input[[metric_input]]]
       if (length(g)) cat_chip(g[1])
     })
+    # The metric's "All banks" line in the current display, or NULL
+    ind_r <- reactive({
+      disp <- input[[paste0(eid, "_display")]]
+      industry_metric(input[[metric_input]], FIELDS_META, INDUSTRY,
+                      if (is.null(disp)) "level" else disp)
+    })
     output[[paste0(eid, "_caveat")]] <- renderUI({
-      metric_footnote(input[[metric_input]])
+      metric_footnote(input[[metric_input]], ind = !is.null(ind_r()),
+                      no_bank = !bank_picked())
     })
     output[[paste0(eid, "_plot")]] <- renderPlotly({
-      bank_gate()
       disp <- input[[paste0(eid, "_display")]]
       if (is.null(disp)) disp <- "level"
       code <- input[[metric_input]]
-      metric_ts(sel_banks(), code, FIELDS_META, sel_cols(),
-                display = disp, peer = peer_for(code, PEER))
+      metric_chart(code, disp, ind_r())
     })
   })
+  # A metric chart for the selected banks, or the industry line alone when
+  # no bank is picked (its footnote then carries the screen's prompt); a
+  # metric with no industry line keeps the prompt on the chart
+  metric_chart <- function(code, disp, ind) {
+    if (!bank_picked()) {
+      validate(need(!is.null(ind), EMPTY_MSG))
+      return(metric_ts(list(), code, FIELDS_META, NULL, display = disp,
+                       peer = peer_for(code, PEER), ind = ind))
+    }
+    metric_ts(sel_banks(), code, FIELDS_META, sel_cols(), display = disp,
+              peer = peer_for(code, PEER), ind = ind)
+  }
 
   # Fixed-purpose charts. bank_gate() on the first chart of each screen;
   # prov_plot shares the Reserves screen with rc_plot, so it stays silent ----
@@ -720,12 +760,12 @@ server <- function(input, output, session) {
     bank_gate()
     funding_share(cur(), df2 = cmp())
   })
-  output$sens_plot <- renderPlotly({
-    bank_gate()
-    metric_ts(sel_banks(), "unrl_pct_eq", FIELDS_META, sel_cols(),
-              peer = peer_for("unrl_pct_eq", PEER))
+  SENS_IND <- industry_metric("unrl_pct_eq", FIELDS_META, INDUSTRY)
+  output$sens_plot <- renderPlotly(metric_chart("unrl_pct_eq", "level", SENS_IND))
+  output$sens_caveat <- renderUI({
+    metric_footnote("unrl_pct_eq", ind = !is.null(SENS_IND),
+                    no_bank = !bank_picked())
   })
-  output$sens_caveat <- renderUI({ metric_footnote("unrl_pct_eq") })
 
   # Failure comparison ----
   # Region + size filters narrow the picker AND the baseline set; explicit

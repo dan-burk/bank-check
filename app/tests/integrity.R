@@ -33,6 +33,7 @@ source("R/api.R")
 source("R/theme.R")
 source("R/data.R")
 source("R/plots.R")
+source("R/statements.R")
 
 INTEGRITY_SEED <- Sys.getenv("INTEGRITY_SEED", "20260716")
 
@@ -378,6 +379,86 @@ for (s in list(c("30-89 days late", "P3LNLS"), c("Noncurrent", "NCLNLS"),
               utils::tail(num_y(tr$y), 1),
               round(100 * sum(xs_raw[[s[2]]], na.rm = TRUE) /
                       sum(xs_raw$LNLSGR, na.rm = TRUE), 2))
+}
+
+# Every metric's "All banks" line (metric_ts, no bank: full history) vs
+# the mart recomputed here. The averaging windows use their own index
+# arithmetic on a full quarter-end calendar, sharing no code with
+# industry_series(). Dollar metrics are checked in both % modes.
+qe <- seq(as.Date("1984-04-01"), by = "quarter",
+          length.out = 4 * (as.integer(substr(max(ind$RISDATE), 1, 4)) - 1983)) - 1
+qe <- qe[qe <= as.Date(as.character(max(ind$RISDATE)), "%Y%m%d")]
+idate <- as.Date(as.character(ind$RISDATE), "%Y%m%d")
+at <- function(col, dates) col[match(dates, idate)]
+indep <- function(num, den, scale) {
+  n <- as.numeric(eval(str2lang(num), ind))[match(qe, idate)]
+  d <- as.numeric(ind[[den]])
+  if (scale %in% c("ann_q", "ann_ytd")) {
+    k <- if (scale == "ann_q") rep(1L, length(qe)) else as.integer(format(qe, "%m")) / 3L
+    avg <- vapply(seq_along(qe), function(i) {
+      if (i - k[i] < 1) return(NA_real_)
+      mean(at(d, qe[(i - k[i]):i]))
+    }, 0)
+    y <- 100 * n * 4 / k / avg
+  } else {
+    y <- (if (scale == "x") 1 else 100) * n / at(d, qe)
+  }
+  round(ifelse(is.finite(y), y, NA_real_), 2)
+}
+n_ind <- 0
+for (i in which(!is.na(FIELDS_META$ind_num))) {
+  m <- FIELDS_META[i, ]
+  usd <- m$units == "usd_k"
+  for (disp in if (usd) c("pct_assets", "pct_loans") else "level") {
+    den <- if (usd) c(pct_assets = "ASSET", pct_loans = "LNLSGR")[[disp]] else m$ind_den
+    scale <- if (usd) "pct" else m$ind_scale
+    nm <- paste0("All banks ", m$code, if (usd) paste0(" ", disp))
+    if (!all(c(all.vars(str2lang(m$ind_num)), den) %in% names(ind))) {
+      cat("SKIPPED:", nm, "(mart built before its fields were summed)\n")
+      next
+    }
+    tr <- built_traces(metric_ts(list(), m$code, FIELDS_META, NULL, display = disp,
+                                 ind = industry_metric(m$code, FIELDS_META, ind, disp)))
+    expect_trace(nm, tr, "All banks", qe, indep(m$ind_num, den, scale))
+    n_ind <- n_ind + 1
+  }
+}
+cat("industry lines checked:", n_ind, "\n")
+
+# The mart's newest row is the raw cross-section summed: every summed
+# field, unless coverage made it NA
+nr <- ind[ind$RISDATE == XS_RISDATE, ]
+for (f in setdiff(strsplit(STATEMENT_FIELDS, ",")[[1]], c("CERT", "RISDATE"))) {
+  if (is.null(nr[[f]]) || is.na(nr[[f]])) next
+  s <- sum(as.numeric(xs_raw[[f]]), na.rm = TRUE)
+  if (abs(nr[[f]] - s) > 1e-9 * max(1, abs(s))) {
+    stop("industry_quarterly ", f, " newest = ", nr[[f]], " but the cross-section sums to ", s)
+  }
+}
+cat("ok: industry_quarterly newest row = summed cross-section, every field\n")
+
+# Sanity against FDIC's published Quarterly Banking Profile. The API
+# carries amended filings, so these are ranges, not the printed figures
+# (2009: QBP printed ROA 0.09%; restated data, e.g. FIA Card Services at
+# -$24.6B, sums to about -0.07%). Outside them means a broken definition.
+QBP <- utils::read.table(header = TRUE, text = "
+  code     risdate   lo     hi    # QBP as printed
+  NCLNLSR  20100331  5.2    5.7   # 5.45 (the peak)
+  NTLNLSR  20091231  2.2    2.8   # 2.49
+  ROA      20191231  1.15   1.40  # 1.29
+  ROA      20091231 -0.5    0.5   # 0.09, restated since
+  ROE      20191231  10     13    # 11.4
+", comment.char = "#")
+for (i in seq_len(nrow(QBP))) {
+  s <- industry_metric(QBP$code[i], FIELDS_META, ind)
+  if (is.null(s)) { cat("SKIPPED: QBP", QBP$code[i], "(fields not in mart)\n"); next }
+  v <- s$y[s$date == as.Date(as.character(QBP$risdate[i]), "%Y%m%d")]
+  if (!isTRUE(v >= QBP$lo[i] && v <= QBP$hi[i])) {
+    stop("All banks ", QBP$code[i], " at ", QBP$risdate[i], " = ", round(v, 3),
+         ", outside FDIC's published range [", QBP$lo[i], ", ", QBP$hi[i], "]")
+  }
+  cat(sprintf("ok: All banks %s %d = %.2f (QBP range %s to %s)\n", QBP$code[i],
+              QBP$risdate[i], v, QBP$lo[i], QBP$hi[i]))
 }
 
 # ---- phase 2: live full-history checks (self-skips offline) ----------------

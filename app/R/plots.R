@@ -96,8 +96,12 @@ threshold_layers <- function(row, peer = NULL) {
 
 # One metric, one or more banks. `display` rescales dollar metrics on the
 # fly: "level" ($), "pct_assets", or "pct_loans" — flat rates on a growing
-# book look like rising dollars, so both views matter.
-metric_ts <- function(banks, code, meta, cols, display = "level", peer = NULL) {
+# book look like rising dollars, so both views matter. ind = the metric's
+# "All banks" series (industry_metric(), already in display units): a
+# faded dashed line over the banks' date span, or solid over full history
+# when banks is empty (no bank picked).
+metric_ts <- function(banks, code, meta, cols, display = "level", peer = NULL,
+                      ind = NULL) {
   row <- meta[meta$code == code, ]
   if (nrow(row) == 0) {
     row <- data.frame(code = code, label = code, units = "usd_k",
@@ -157,6 +161,30 @@ metric_ts <- function(banks, code, meta, cols, display = "level", peer = NULL) {
                       "</b>"),
         xanchor = "left", showarrow = FALSE, xshift = 8,
         font = list(color = cols[[lb]], size = 12)
+      )
+    }
+  }
+  if (!is.null(ind)) {
+    alone <- length(series) == 0
+    if (!alone) {
+      span <- range(do.call(c, lapply(series, `[[`, "x")), na.rm = TRUE)
+      ind <- ind[ind$date >= span[1] & ind$date <= span[2], ]
+    }
+    all_y <- c(all_y, ind$y[is.finite(ind$y)])
+    p <- plotly::add_trace(
+      p, x = ind$date, y = round(ind$y, 2), name = "All banks",
+      type = "scatter", mode = "lines", opacity = if (alone) 1 else 0.6,
+      line = list(color = COL_FG, width = if (alone) 2 else 1.5,
+                  dash = if (alone) "solid" else "dash"),
+      hovertemplate = paste0(hover_pre, "%{y}", hover_suf)
+    )
+    if (alone && any(!is.na(ind$y))) {
+      last_i <- max(which(!is.na(ind$y)))
+      p <- plotly::add_annotations(
+        p, x = ind$date[last_i], y = round(ind$y[last_i], 2),
+        text = paste0("<b>", round(ind$y[last_i], 2), hover_suf, "</b>"),
+        xanchor = "left", showarrow = FALSE, xshift = 8,
+        font = list(color = COL_FG, size = 12)
       )
     }
   }
@@ -393,23 +421,35 @@ pipeline_lines <- function(df, df2 = NULL, from_date = as.Date("2019-01-01"),
       }
     }
   }
-  if (!is.null(ind) && is.null(df2)) {
-    ii <- ind[order(ind$RISDATE), ]
-    ii$date <- as.Date(as.character(ii$RISDATE), format = "%Y%m%d")
-    ii <- ii[ii$date >= from_date, ]
-    for (s in series) {
-      if (is.null(ii[[s$ind]])) next
-      p <- plotly::add_trace(
-        p, x = ii$date, y = round(100 * ii[[s$ind]] / ii$LNLSGR, 2),
-        name = paste0(s$name, " - All banks"),
-        type = "scatter", mode = "lines", opacity = if (is.null(df)) 1 else 0.5,
-        line = list(color = s$color, width = if (is.null(df)) 2 else 1.5,
-                    dash = if (is.null(df)) "solid" else "dash"),
-        hovertemplate = "%{y}%"
-      )
-    }
+  if (is.null(df2)) {
+    p <- add_industry_lines(p, ind, lapply(series, function(s) {
+      list(name = s$name, color = s$color, num = s$ind, den = "LNLSGR")
+    }), from_date, alone = is.null(df))
   }
   base_layout(p, "% of gross loans")
+}
+
+# Each series' "All banks" twin (industry_series, % of den) on a fixed
+# multi-series chart: faded dashed beside a bank, solid when alone (no bank
+# picked). series: list(name, color, num, den). A series whose columns the
+# mart lacks is skipped. digits matches the bank traces' rounding; x maps
+# the dates for charts on a category axis.
+add_industry_lines <- function(p, ind, series, from_date, alone,
+                               digits = 2, x = identity) {
+  for (s in series) {
+    v <- industry_series(ind, s$num, s$den)
+    if (is.null(v)) next
+    v <- v[v$date >= from_date, ]
+    p <- plotly::add_trace(
+      p, x = x(v$date), y = round(v$y, digits),
+      name = paste0(s$name, " - All banks"),
+      type = "scatter", mode = "lines", opacity = if (alone) 1 else 0.5,
+      line = list(color = s$color, width = if (alone) 2 else 1.5,
+                  dash = if (alone) "solid" else "dash"),
+      hovertemplate = "%{y}%"
+    )
+  }
+  p
 }
 
 # Quarterly provision vs charge-offs (FDIC's quarterly fields), as
