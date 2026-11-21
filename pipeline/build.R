@@ -206,7 +206,8 @@ if (length(revisions)) {
 # Built from every raw quarter on disk (not just this run), with the app's
 # own industry_totals() so the numbers match the Industry tab exactly.
 # raw_sums are plain sums for the aggregation cross-check below.
-AGG_FIELDS <- c("ASSET", "LIAB", "EQTOT", "DEP", "NETINCQ")
+AGG_FIELDS <- c("ASSET", "LIAB", "EQTOT", "DEP", "NETINCQ",
+                "LNLSGR", "P3LNLS", "NCLNLS")
 files <- sort(list.files(RAW, pattern = "^risdate\\.\\d{8}\\.parquet$",
                          full.names = TRUE), decreasing = TRUE)
 ind <- list(); cov <- list(); raw_sums <- list()
@@ -317,7 +318,9 @@ check(SAMPLE || length(holes) == 0,
 check(all(manifest$risdate %in% ind$RISDATE), "manifest lists quarters with no raw file")
 check(all(cov$asset_share[cov$RISDATE %in% recent] >= COVERAGE_MIN),
       "a statement field is below COVERAGE_MIN in the last 10 quarters")
-check(nrow(cov) == 18 * nrow(ind), "field_coverage is not 18 fields per quarter")
+n_fields <- length(strsplit(STATEMENT_FIELDS, ",")[[1]]) - 2L   # less CERT, RISDATE
+check(nrow(cov) == n_fields * nrow(ind),
+      paste("field_coverage is not", n_fields, "fields per quarter"))
 lowc <- cov[cov$asset_share < COVERAGE_MIN, ]
 check(all(is.na(ind[cbind(match(lowc$RISDATE, ind$RISDATE),
                           match(lowc$field, names(ind)))])),
@@ -333,6 +336,15 @@ check(ind$RISDATE[1] == newest && ind$n_banks[1] == nrow(filed),
 gap <- abs(ind$ASSET - (ind$LIAB + ind$EQTOT)) / ind$ASSET
 if (anyNA(gap)) cat("Identity skipped (LIAB/EQTOT NA):", ind$RISDATE[is.na(gap)], "\n")
 check(all(gap < 0.001, na.rm = TRUE), "industry assets != liabilities + equity")
+# Industry delinquency and allowance as % of gross loans (Delinquency
+# chart). These stay well under 10% even at their 1991 and 2010 peaks;
+# outside (0, 10%) means a unit or sum error. NA (coverage) quarters skip.
+for (k in c("P3LNLS", "NCLNLS", "LNATRES")) {
+  r <- 100 * ind[[k]] / ind$LNLSGR
+  check(all(r > 0 & r < 10, na.rm = TRUE),
+        paste0("industry ", k, "/LNLSGR outside (0, 10%) in ",
+               paste(utils::head(ind$RISDATE[which(!(r > 0 & r < 10))], 5), collapse = ",")))
+}
 # Quarter-over-quarter bank count moves ~1%; a big drop means a partial pull
 n <- ind$n_banks
 adj <- utils::tail(ind$RISDATE, -1) ==
