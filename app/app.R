@@ -303,13 +303,20 @@ ui <- page_navbar(
     card(card_header("Balance Sheet Over Time"),
          plotlyOutput("ind_bs_plot", height = "420px"),
          div(class = "text-muted small",
-             "Quarter-end, nominal dollars. The allowance (−) is drawn as a positive amount.")),
+             "Quarter-end, nominal dollars. The allowance (−) is drawn as a positive amount.",
+             star_line(paste0("CECL: an accounting change; since 2023 (2020 for ",
+                              "the largest banks) the allowance covers expected ",
+                              "lifetime losses, so it can jump without new trouble")))),
     card(card_header("Income Statement Over Time"),
          plotlyOutput("ind_is_plot", height = "420px"),
          div(class = "text-muted small",
              "Quarterly, nominal dollars. Subtracted (−) items are drawn as positive amounts.",
              "Bond gains/losses and Other keep their sign: above zero added to net income, below zero cut it.",
-             "A gap means FDIC data does not cover that line for that quarter."))
+             "A gap means FDIC data does not cover that line for that quarter.",
+             star_line(paste0("CECL: an accounting change; since 2023 (2020 for ",
+                              "the largest banks) the allowance covers expected ",
+                              "lifetime losses, and the loan loss provision ",
+                              "builds it, so the provision can jump without new trouble"))))
   ),
 
   nav_panel("Capital", ui_explorer("cap", EXPLORERS$cap$groups, EXPLORERS$cap$default)),
