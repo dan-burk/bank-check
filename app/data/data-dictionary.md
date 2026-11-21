@@ -2,7 +2,7 @@
 
 Living document. Every field used in `analysis/` scripts is defined here before it is trusted. All codes verified against the live API (`https://api.fdic.gov/banks/financials`) on 2026-07-07, index `risview_20260608210616`. Titles come from the FDIC's own `risview_properties.yaml`; the caveats are ours.
 
-## Ground rules that apply to every field
+## Ground Rules That Apply To Every Field
 
 - **Dollar fields are $thousands.** `ASSET = 4867664` means $4.87B.
 - **Unsuffixed ratio fields are year-to-date, annualized** (`ROA`, `NIMY`, `ELNATRY`, `NTLNLSR`). The `Q`-suffixed twins (`ROAQ`, `NIMYQ`, `ELNATRYQ`, `NTLNLSQR`) are single-quarter, annualized. Use Q variants for turning-point detection; YTD variants smooth within a calendar year and reset every January.
@@ -25,7 +25,7 @@ The bank's own money, the layer that absorbs losses before depositors take any. 
 
 Game to watch: most community banks opted out of including AOCI in regulatory capital. A bank can have capital ratios untouched while its bond portfolio is deeply underwater. Check `SCAF - SCAA` against `EQ` yourself (see S section).
 
-## A: Asset quality
+## A: Asset Quality
 
 Whether the money the bank lent out is coming back.
 
@@ -83,7 +83,7 @@ The spread between what the bank pays for money and what it charges for it, whic
 
 Game to watch: securities gains (`IGLSEC`) flow through earnings. A bank selling its winners to book gains while keeping losers at cost is converting balance-sheet quality into reported income.
 
-## L: Liquidity and funding
+## L: Liquidity And Funding
 
 Whose money funds the bank. Sticky money (local checking accounts) stays; hot money (bought deposits, borrowings) leaves at the first sign of trouble, exactly when the bank needs it most.
 
@@ -103,7 +103,7 @@ Whose money funds the bank. Sticky money (local checking accounts) stays; hot mo
 
 Game to watch: total deposits can grow while funding quality collapses. Dacotah is the live example: `DEP` grew 2023 to 2026, but `BRO` went from $0 to $862M and `COREDEPR` fell 84% to 65%. The topline hides the substitution; always split DEP into core vs bought.
 
-## S: Sensitivity and securities marks
+## S: Sensitivity And Securities Marks
 
 Bonds bought before rates rose are worth less now, and accounting rules let the bank choose how visible that is.
 
@@ -116,7 +116,7 @@ Bonds bought before rates rose are worth less now, and accounting rules let the 
 
 Derived check for any bank: `(SCAF - SCAA) + (SCHF - SCHA)` vs `EQ`. If total unrealized losses are a large fraction of equity, book capital is fiction. Dacotah Q4 2025: -$25.9M vs $462M equity (~6%, mild; no HTM book at all).
 
-## Identifiers / metadata
+## Identifiers / Metadata
 
 | Code | What it is |
 |---|---|
@@ -128,7 +128,7 @@ Derived check for any bank: `(SCAF - SCAA) + (SCHF - SCHA)` vs `EQ`. If total un
 | REGAGNT | Primary regulator (FDIC / OCC / FED). |
 | NUMEMP | Full-time-equivalent employees. |
 
-## Failures endpoint (`/banks/failures`)
+## Failures Endpoint (`/banks/failures`)
 
 Verified 2026-07-07, index `failures_1779890467665`. 592 records with `FAILYR >= 2000`; filter `RESTYPE:"FAILURE"` to drop open-bank assistance deals. Key fields: `CERT` (join key), `FAILDATE` (text `M/D/YYYY`, not YYYYMMDD), `QBFASSET`/`QBFDEP`/`COST` ($thousands; COST = estimated loss to the insurance fund), `RESTYPE1` (PA/PI/PO = how it was resolved), `CHCLASS1`, `PSTALP`. Fetch via `R/fetch_failures.R`.
 

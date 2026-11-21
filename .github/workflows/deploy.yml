@@ -197,6 +197,23 @@ jobs:
             writeLines(index, "_site/index.html")
           '
 
+      # app.json holds the app's R code and data. shinylive fetches it with
+      # the default cache mode, so the browser reuses its copy for Pages'
+      # max-age=600 and serves the old app for up to 10 minutes after a
+      # deploy. no-cache revalidates by ETag on every load: a cheap 304 when
+      # nothing changed. Fails the build if a shinylive upgrade moves the call.
+      - name: Revalidate app.json on every load
+        run: |
+          Rscript -e '
+            f <- "_site/shinylive/shinylive.js"
+            js <- readLines(f, warn = FALSE)
+            hit <- grep("fetch(\"./app.json\")", js, fixed = TRUE)
+            stopifnot(length(hit) == 1)
+            js[hit] <- sub("fetch(\"./app.json\")",
+                           "fetch(\"./app.json\", { cache: \"no-cache\" })", js[hit], fixed = TRUE)
+            writeLines(js, f)
+          '
+
       - name: Disable Jekyll, add favicon
         run: |
           touch _site/.nojekyll

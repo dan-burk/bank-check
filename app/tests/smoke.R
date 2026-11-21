@@ -450,6 +450,14 @@ shiny::testServer(app = "app", {
             grepl("% of revenue", output$is_table$html, fixed = TRUE))
   cat("ok output: statements in % vs 1 year ago\n")
 
+  # Industry tables are cached (bindCache): each must keep its own section
+  for (u in c("usd", "pct")) {
+    session$setInputs(ind_unit = u, ind_cmp = "qoq")
+    stopifnot(grepl("Net income", output$ind_is_table$html, fixed = TRUE),
+              !grepl("Net income", output$ind_bs_table$html, fixed = TRUE))
+  }
+  cat("ok output: industry tables keep their own section under the cache\n")
+
   session$setInputs(prov_mode = "usd")
   stopifnot(!is.null(output$prov_plot))
   cat("ok output: prov_plot usd\n")
