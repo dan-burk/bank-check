@@ -354,6 +354,29 @@ for (nm in names(sweep)) {
 }
 cat("cross-section sweep done:", nrow(xs), "banks\n")
 
+# Delinquency chart's industry lines: every quarter vs the mart's summed
+# dollars, and the newest quarter vs the raw cross-section summed here
+# (summed dollars / summed gross loans, never a mean of bank ratios)
+ind <- load_industry()
+stopifnot(max(ind$RISDATE) == XS_RISDATE)
+iw <- ind[ind$RISDATE >= 20190101, ]
+ikeys <- as.Date(as.character(iw$RISDATE), "%Y%m%d")
+pl_ind <- built_traces(pipeline_lines(xs[xs$CERT == roster$CERT[1], ], ind = ind))
+for (s in list(c("30-89 days late", "P3LNLS"), c("Noncurrent", "NCLNLS"),
+               c("Allowance", "LNATRES"))) {
+  nm <- paste(s[1], "- All banks")
+  if (is.null(ind[[s[2]]])) {
+    cat("SKIPPED:", nm, "(mart built before", s[2], "was summed)\n")
+    next
+  }
+  expect_trace(nm, pl_ind, nm, ikeys, round(100 * iw[[s[2]]] / iw$LNLSGR, 2))
+  tr <- Filter(function(t) identical(t$name, nm), pl_ind)[[1]]
+  expect_near(paste(nm, "newest vs raw cross-section"),
+              utils::tail(num_y(tr$y), 1),
+              round(100 * sum(xs_raw[[s[2]]], na.rm = TRUE) /
+                      sum(xs_raw$LNLSGR, na.rm = TRUE), 2))
+}
+
 # ---- phase 2: live full-history checks (self-skips offline) ----------------
 
 run_live <- Sys.getenv("INTEGRITY_SKIP_LIVE", "") != "1"

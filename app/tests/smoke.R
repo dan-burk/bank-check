@@ -168,6 +168,26 @@ sel <- data.frame(
 ok("scale_strip", scale_strip(inst, sel))
 ok("pipeline_lines", pipeline_lines(dac))
 ok("pipeline_lines df2", pipeline_lines(dac, df2 = fbt))
+# Industry lines: summed dollars / summed gross loans, one per series, and
+# none with a comparison bank. A mart without P3LNLS/NCLNLS (built before
+# they were summed) drops just those two. ind_dq makes sure both exist.
+ind_dq <- ind
+if (is.null(ind_dq$P3LNLS)) ind_dq$P3LNLS <- 0.005 * ind_dq$LNLSGR
+if (is.null(ind_dq$NCLNLS)) ind_dq$NCLNLS <- 0.010 * ind_dq$LNLSGR
+pl_names <- function(p) vapply(plotly::plotly_build(p)$x$data, function(t) t$name, "")
+ind_lines <- paste(c("30-89 days late", "Noncurrent", "Allowance"), "- All banks")
+pl <- plotly::plotly_build(pipeline_lines(dac, ind = ind_dq))$x$data
+stopifnot(identical(vapply(pl, `[[`, "", "name")[4:6], ind_lines))
+w <- ind_dq[ind_dq$RISDATE >= 20190101, ]; w <- w[order(w$RISDATE), ]
+for (k in 1:3) {
+  stopifnot(isTRUE(all.equal(as.numeric(unlist(pl[[3 + k]]$y)),
+    round(100 * w[[c("P3LNLS", "NCLNLS", "LNATRES")[k]]] / w$LNLSGR, 2))))
+}
+stopifnot(!any(grepl("All banks", pl_names(pipeline_lines(dac, df2 = fbt, ind = ind_dq)))),
+          identical(grep("All banks", pl_names(pipeline_lines(
+            dac, ind = ind[setdiff(names(ind), c("P3LNLS", "NCLNLS"))])), value = TRUE),
+            "Allowance - All banks"))
+cat("ok: pipeline_lines industry lines (columns present, absent, hidden with df2)\n")
 ok("risk_cushion pct", risk_cushion(dac))
 ok("risk_cushion usd", risk_cushion(dac, mode = "usd"))
 ok("risk_cushion pct df2", risk_cushion(dac, df2 = fbt))
@@ -279,6 +299,13 @@ shiny::testServer(app = "app", {
   session$setInputs(prov_mode = "usd")
   stopifnot(!is.null(output$prov_plot))
   cat("ok output: prov_plot usd\n")
+
+  # Industry lines (and their footer note) only without a comparison bank
+  stopifnot(!grepl("Dashed", output$pipeline_note$html))
+  session$setInputs(compare = character(0))
+  stopifnot(is.null(cmp()), !is.null(output$pipeline_plot),
+            grepl("Dashed = all FDIC-insured banks", output$pipeline_note$html))
+  cat("ok output: pipeline_note shown only without a comparison bank\n")
 
   # Directory modal: table renders with one row per active bank, and a
   # row pick runs without error (inst here is the same INSTITUTIONS the
