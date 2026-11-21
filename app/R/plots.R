@@ -403,24 +403,26 @@ risk_cushion <- function(df, mode = "pct", df2 = NULL,
     ), from_date, alone = is.null(df))
   }
   p <- plotly::layout(p, barmode = "group")
-  p <- base_layout(p, y_title)
-  # CECL adoption marker: the allowance definition changed here (2023 for
-  # most banks; the footnote star carries the 2020 large-bank nuance)
+  cecl_marker(base_layout(p, y_title), from_date)
+}
+
+# CECL adoption marker: the allowance definition changed here (2023 for
+# most banks; the footnote star carries the 2020 large-bank nuance).
+# Drawn only when the chart's data starts before it.
+cecl_marker <- function(p, from_date) {
   cecl <- as.Date("2023-01-01")
-  if (from_date < cecl) {
-    p <- plotly::layout(
-      p,
-      shapes = list(list(type = "line", x0 = cecl, x1 = cecl,
-                         yref = "paper", y0 = 0, y1 = 0.94,
-                         line = list(color = COL_GRAY, dash = "dot",
-                                     width = 1.2))),
-      annotations = list(list(x = cecl, y = 1, yref = "paper", text = "CECL",
-                              showarrow = FALSE, yanchor = "top",
-                              xanchor = "left", xshift = 4,
-                              font = list(color = COL_GRAY, size = 11)))
-    )
-  }
-  p
+  if (from_date >= cecl) return(p)
+  plotly::layout(
+    p,
+    shapes = list(list(type = "line", x0 = cecl, x1 = cecl,
+                       yref = "paper", y0 = 0, y1 = 0.94,
+                       line = list(color = COL_GRAY, dash = "dot",
+                                   width = 1.2))),
+    annotations = list(list(x = cecl, y = 1, yref = "paper", text = "CECL",
+                            showarrow = FALSE, yanchor = "top",
+                            xanchor = "left", xshift = 4,
+                            font = list(color = COL_GRAY, size = 11)))
+  )
 }
 
 # Roll-rate proxies were cut in iteration 5: net flows from quarterly bucket
@@ -722,6 +724,8 @@ industry_history <- function(long, section, unit = "usd") {
                   dash = if (length(s) > 1) s[2] else "solid"),
       hovertemplate = paste0(nm, ": ", fmt, "<extra></extra>"))
   }
-  base_layout(p, y_title) |> range_buttons() |>
+  # Provision (income statement) and allowance (balance sheet) both moved
+  # with the CECL change, so both charts carry the marker
+  base_layout(p, y_title) |> cecl_marker(min(long$date)) |> range_buttons() |>
     plotly::layout(legend = list(groupclick = "toggleitem"))
 }

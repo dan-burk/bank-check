@@ -154,6 +154,14 @@ for (u in c("usd", "pct")) {
   stopifnot(identical(vapply(tr[shown], `[[`, "", "name"),
                       c("+ Revenue", "− Expenses", "− Loan loss provision", "= Net income")),
             all(vapply(tr[!shown], `[[`, "", "visible") == "legendonly"))
+  # CECL marker on both history charts (provision and allowance both moved)
+  for (sec in c("is", "bs")) {
+    lay <- plotly::plotly_build(industry_history(ind_long, sec, u))$x$layout
+    stopifnot(length(lay$shapes) == 1,
+              identical(as.Date(lay$shapes[[1]]$x0), as.Date("2023-01-01")),
+              lay$shapes[[1]]$line$dash == "dot",
+              identical(lay$annotations[[1]]$text, "CECL"))
+  }
   bs <- plotly::plotly_build(industry_history(ind_long, "bs", u))$x$data
   stopifnot(identical(vapply(Filter(function(t) isTRUE(t$visible), bs), `[[`, "", "name"),
                       c("= Total assets", "= Total liabilities", "= Equity (assets − liabilities)")),
