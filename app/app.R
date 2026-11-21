@@ -690,13 +690,20 @@ server <- function(input, output, session) {
 
   # Fixed-purpose charts. bank_gate() on the first chart of each screen;
   # prov_plot shares the Reserves screen with rc_plot, so it stays silent ----
+  # No bank picked: the industry lines alone, so this screen's prompt moves
+  # to pipeline_note instead of bank_gate()
   output$pipeline_plot <- renderPlotly({
-    bank_gate()
+    if (!bank_picked()) {
+      validate(need(!is.null(INDUSTRY), EMPTY_MSG))
+      return(pipeline_lines(NULL, ind = INDUSTRY))
+    }
     pipeline_lines(cur(), df2 = cmp(), ind = INDUSTRY)
   })
   # Industry lines are drawn only without a comparison bank
   output$pipeline_note <- renderUI({
-    if (is.null(cmp())) div("Dashed = all FDIC-insured banks (their loans combined).")
+    if (!bank_picked())
+      div(tags$strong("All FDIC-insured banks"), " (their loans combined). ", EMPTY_MSG)
+    else if (is.null(cmp())) div("Dashed = all FDIC-insured banks (their loans combined).")
   })
   output$rc_plot <- renderPlotly({
     bank_gate()
