@@ -352,6 +352,19 @@ ca <- pp$x$layout$xaxis$categoryarray
 stopifnot(all(unlist(pp$x$data[[3]]$x) %in% ca), all(dac$qlab[dac$RISDATE >= 20220101] %in% ca),
           identical(ca[1], "Q1'22"))
 cat("ok: risk_cushion, prov_nco_bars, funding_share All banks lines\n")
+# Loan Mix: industry bands (dashed edges beside a bank, filled alone), % only;
+# each band = summed field / summed gross loans
+lm_all <- function(...) Filter(function(t) grepl("- All banks$", t$name),
+                               plotly::plotly_build(loan_mix(...))$x$data)
+lb <- lm_all(dac, ind = ind_full); la <- lm_all(NULL, ind = ind_full)
+w <- ind_full[order(ind_full$RISDATE), ]
+w <- w[as.Date(as.character(w$RISDATE), "%Y%m%d") >= as.Date("2010-01-01"), ]
+stopifnot(length(lb) == 7, length(la) == 7,
+          identical(lb[[1]]$line$dash, "dash"), identical(la[[1]]$fillcolor, "#009E73"),
+          isTRUE(all.equal(as.numeric(unlist(la[[6]]$y)), round(100 * w$LNCI / w$LNLSGR, 2))),
+          length(lm_all(dac, mode = "usd", ind = ind_full)) == 0,
+          length(lm_all(dac)) == 0)
+cat("ok: loan_mix All banks bands\n")
 # Funding Mix Core line = COREDEP/DEP, sharing the deposits denominator
 # with Brokered and Uninsured (FDIC's COREDEPR is % of ASSETS, not deposits)
 pf_core <- plotly::plotly_build(funding_share(dac))

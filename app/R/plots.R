@@ -280,13 +280,12 @@ funding_share <- function(df, df2 = NULL, from_date = as.Date("2015-01-01"),
   base_layout(p, "% of total deposits")
 }
 
-# Loan-book mix, stacked $ or share of gross loans
-loan_mix <- function(df, mode = "pct", from_date = as.Date("2010-01-01")) {
-  dd <- df[df$date >= from_date, ] |>
-    dplyr::mutate(
-      other_re = pmax(LNRE - LNRECONS - LNRENRES - LNREMULT, 0),
-      other_ln = pmax(gross_lns - LNAG - LNCI - LNRE, 0)
-    )
+# Loan-book mix, stacked $ or share of gross loans. ind = the industry
+# mart: in the % view, the "All banks" mix as dashed band edges over the
+# bank's bands (summed dollars / summed gross loans), or as the filled
+# bands alone when df = NULL. Skipped if the mart lacks a band's field.
+loan_mix <- function(df, mode = "pct", from_date = as.Date("2010-01-01"),
+                     ind = NULL) {
   comps <- list(
     list(col = "LNAG",     name = "Agriculture",             color = "#009E73"),
     list(col = "LNRECONS", name = "Construction",            color = "#D55E00"),
@@ -296,9 +295,21 @@ loan_mix <- function(df, mode = "pct", from_date = as.Date("2010-01-01")) {
     list(col = "LNCI",     name = "Business loans",          color = "#2C5F8A"),
     list(col = "other_ln", name = "Everything else",         color = "#BBBBBB")
   )
+  bands <- function(d) dplyr::mutate(d[d$date >= from_date, ],
+    other_re = pmax(LNRE - LNRECONS - LNRENRES - LNREMULT, 0),
+    other_ln = pmax(gross_lns - LNAG - LNCI - LNRE, 0))
+  need <- c("LNLSGR", "LNAG", "LNRECONS", "LNRENRES", "LNREMULT", "LNRE", "LNCI")
+  if (mode != "pct" || !all(need %in% names(ind))) ind <- NULL
+  if (!is.null(ind)) {
+    ind <- ind[order(ind$RISDATE), ]
+    ind$date <- as.Date(as.character(ind$RISDATE), "%Y%m%d")
+    ind$gross_lns <- ind$LNLSGR
+    ind <- bands(ind)
+  }
+  dd <- if (is.null(df)) ind else bands(df)
   # Unit from gross loans: the bands stack to the whole book
   sc <- if (mode == "usd") usd_axis_unit(dd$gross_lns) else NULL
-  p <- plotly::plot_ly(dd, x = ~date)
+  p <- plotly::plot_ly()
   for (cm in comps) {
     y <- dd[[cm$col]]
     if (mode == "pct") {
@@ -306,10 +317,23 @@ loan_mix <- function(df, mode = "pct", from_date = as.Date("2010-01-01")) {
     } else {
       y <- y / sc$div; hv <- paste0("$%{y}", sc$letter)
     }
-    p <- plotly::add_trace(p, y = round(y, 2), name = cm$name,
+    p <- plotly::add_trace(p, x = dd$date, y = round(y, 2),
+                           name = if (is.null(df)) paste0(cm$name, " - All banks") else cm$name,
                            type = "scatter", mode = "none",
                            stackgroup = "one", fillcolor = cm$color,
                            hovertemplate = hv)
+  }
+  if (!is.null(df) && !is.null(ind)) {
+    ind <- ind[ind$date >= min(dd$date) & ind$date <= max(dd$date), ]
+    for (cm in comps) {
+      p <- plotly::add_trace(p, x = ind$date,
+                             y = round(100 * ind[[cm$col]] / ind$gross_lns, 2),
+                             name = paste0(cm$name, " - All banks"),
+                             type = "scatter", mode = "lines",
+                             stackgroup = "ind", fill = "none",
+                             line = list(color = cm$color, width = 1.5, dash = "dash"),
+                             hovertemplate = "%{y}%")
+    }
   }
   base_layout(p, if (mode == "pct") "% of gross loans" else sc$word)
 }

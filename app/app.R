@@ -173,6 +173,10 @@ scoped_choices <- function(groups) {
 
 DISPLAY_CHOICES <- c("$" = "level", "% assets" = "pct_assets",
                      "% loans" = "pct_loans")
+# Dollar metrics open in % of assets: the "All banks" line has no $ view
+# (summed industry dollars would flatten the bank). Total assets as % of
+# assets is a flat 100, so it keeps $.
+display_default <- function(code) if (identical(code, "ASSET")) "level" else "pct_assets"
 
 # Directory table behind the sidebar's Browse link. State is a factor so
 # DT's column filter renders a dropdown, not a text box. Row order must
@@ -367,6 +371,7 @@ ui <- page_navbar(
           mode_header("What The Bank Lends Against", "mix_mode"),
           plotlyOutput("mix_plot", height = "440px"),
           card_footer(class = "text-muted small",
+                      uiOutput("mix_note"),
                       div(paste0("Each band is a share of the loan book. ",
                                  "One dominant loan type is one ",
                                  "concentrated bet.")))
@@ -710,28 +715,32 @@ server <- function(input, output, session) {
       units <- FIELDS_META$units[FIELDS_META$code == input[[metric_input]]]
       if (length(units) && units == "usd_k") {
         radioButtons(paste0(eid, "_display"), NULL, inline = TRUE,
-                     choices = DISPLAY_CHOICES)
+                     choices = DISPLAY_CHOICES,
+                     selected = display_default(input[[metric_input]]))
       }
     })
     output[[paste0(eid, "_chip")]] <- renderUI({
       g <- FIELDS_META$group[FIELDS_META$code == input[[metric_input]]]
       if (length(g)) cat_chip(g[1])
     })
+    # Display for the current metric: "level" unless it is a dollar metric
+    # (a stale toggle value from an earlier dollar metric is ignored)
+    disp_r <- reactive({
+      code <- input[[metric_input]]
+      if (!identical(FIELDS_META$units[FIELDS_META$code == code], "usd_k")) return("level")
+      d <- input[[paste0(eid, "_display")]]
+      if (is.null(d)) display_default(code) else d
+    })
     # The metric's "All banks" line in the current display, or NULL
     ind_r <- reactive({
-      disp <- input[[paste0(eid, "_display")]]
-      industry_metric(input[[metric_input]], FIELDS_META, INDUSTRY,
-                      if (is.null(disp)) "level" else disp)
+      industry_metric(input[[metric_input]], FIELDS_META, INDUSTRY, disp_r())
     })
     output[[paste0(eid, "_caveat")]] <- renderUI({
       metric_footnote(input[[metric_input]], ind = !is.null(ind_r()),
                       no_bank = !bank_picked())
     })
     output[[paste0(eid, "_plot")]] <- renderPlotly({
-      disp <- input[[paste0(eid, "_display")]]
-      if (is.null(disp)) disp <- "level"
-      code <- input[[metric_input]]
-      metric_chart(code, disp, ind_r())
+      metric_chart(input[[metric_input]], disp_r(), ind_r())
     })
   })
   # A metric chart for the selected banks, or the industry line alone when
@@ -800,10 +809,17 @@ server <- function(input, output, session) {
     prov_nco_bars(cur(), mode = input$prov_mode, ind = INDUSTRY)
   })
   output$prov_note <- renderUI(ind_note(prov_ind(), prompt = FALSE))
+  mix_ind <- reactive(identical(input$mix_mode, "pct") &&
+                        ind_has("LNLSGR", "LNAG", "LNRECONS", "LNRENRES",
+                                "LNREMULT", "LNRE", "LNCI"))
   output$mix_plot <- renderPlotly({
-    bank_gate()
-    loan_mix(cur(), mode = input$mix_mode)
+    if (!bank_picked()) {
+      validate(need(mix_ind(), EMPTY_MSG))
+      return(loan_mix(NULL, ind = INDUSTRY))
+    }
+    loan_mix(cur(), mode = input$mix_mode, ind = INDUSTRY)
   })
+  output$mix_note <- renderUI(ind_note(mix_ind()))
   output$funding_share_plot <- renderPlotly({
     if (!bank_picked()) {
       validate(need(fund_ind(), EMPTY_MSG))
