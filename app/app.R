@@ -335,6 +335,7 @@ ui <- page_navbar(
                                       "a flag, not a verdict: troubled loans ",
                                       "backed by collateral recover some ",
                                       "value.")),
+                           uiOutput("rc_note"),
                            star_line("Allowance: money set aside for expected loan losses"),
                            star_line("Noncurrent: loans 90+ days past due or no longer collecting interest"),
                            star_line(paste0("CECL: an accounting change; since 2023 (2020 for ",
@@ -348,6 +349,7 @@ ui <- page_navbar(
                                       "charge-offs* take from it. Provision ",
                                       "trailing charge-offs thins the ",
                                       "cushion.")),
+                           uiOutput("prov_note"),
                            star_line("Provision: money the bank sets aside this quarter for expected loan losses"),
                            star_line("Charge-off: a loan written off as uncollectible")))
         )
@@ -384,6 +386,7 @@ ui <- page_navbar(
                       div(paste0("Each line is a share of total deposits. ",
                                  "Core deposits tend to stay; brokered* and ",
                                  "uninsured money leave first.")),
+                      uiOutput("funding_note"),
                       star_line(paste0("Brokered: deposits bought through a broker rather ",
                                        "than gathered from the bank's own customers")))
         )
@@ -745,21 +748,54 @@ server <- function(input, output, session) {
       div(tags$strong("All FDIC-insured banks"), " (their loans combined). ", EMPTY_MSG)
     else if (is.null(cmp())) div("Dashed = all FDIC-insured banks (their loans combined).")
   })
+  # Reserves and Funding Mix: "All banks" lines on % views (and without a
+  # comparison bank where the chart already has six lines). With no bank
+  # picked they draw alone if the mart has every column they need;
+  # rc_plot then moves the screen's prompt to rc_note, as pipeline does.
+  ind_has <- function(...) all(c(...) %in% names(INDUSTRY))
+  rc_ind <- reactive(identical(input$rc_mode, "pct") && is.null(cmp()) &&
+                       ind_has("NTLNLSQ", "LNATRES", "NCLNLS", "LNLSGR"))
+  prov_ind <- reactive(identical(input$prov_mode, "pct") &&
+                         ind_has("ELNATQ", "NTLNLSQ", "LNLSGR"))
+  fund_ind <- reactive(is.null(cmp()) && ind_has("COREDEP", "BRO", "DEPUNINS", "DEP"))
+  ind_note <- function(drawn, prompt = TRUE) {
+    if (!drawn) return(NULL)
+    if (!bank_picked()) {
+      div(tags$strong("All FDIC-insured banks"), " (combined).",
+          if (prompt) paste0(" ", EMPTY_MSG))
+    } else {
+      div(paste0("Dashed = all FDIC-insured banks combined (summed dollars, so ",
+                 "the largest banks dominate)."))
+    }
+  }
   output$rc_plot <- renderPlotly({
-    bank_gate()
-    risk_cushion(cur(), mode = input$rc_mode, df2 = cmp())
+    if (!bank_picked()) {
+      validate(need(rc_ind(), EMPTY_MSG))
+      return(risk_cushion(NULL, mode = "pct", ind = INDUSTRY))
+    }
+    risk_cushion(cur(), mode = input$rc_mode, df2 = cmp(), ind = INDUSTRY)
   })
+  output$rc_note <- renderUI(ind_note(rc_ind()))
   output$prov_plot <- renderPlotly({
-    prov_nco_bars(cur(), mode = input$prov_mode)
+    if (!bank_picked()) {
+      req(prov_ind())
+      return(prov_nco_bars(NULL, mode = "pct", ind = INDUSTRY))
+    }
+    prov_nco_bars(cur(), mode = input$prov_mode, ind = INDUSTRY)
   })
+  output$prov_note <- renderUI(ind_note(prov_ind(), prompt = FALSE))
   output$mix_plot <- renderPlotly({
     bank_gate()
     loan_mix(cur(), mode = input$mix_mode)
   })
   output$funding_share_plot <- renderPlotly({
-    bank_gate()
-    funding_share(cur(), df2 = cmp())
+    if (!bank_picked()) {
+      validate(need(fund_ind(), EMPTY_MSG))
+      return(funding_share(NULL, ind = INDUSTRY))
+    }
+    funding_share(cur(), df2 = cmp(), ind = INDUSTRY)
   })
+  output$funding_note <- renderUI(ind_note(fund_ind()))
   SENS_IND <- industry_metric("unrl_pct_eq", FIELDS_META, INDUSTRY)
   output$sens_plot <- renderPlotly(metric_chart("unrl_pct_eq", "level", SENS_IND))
   output$sens_caveat <- renderUI({

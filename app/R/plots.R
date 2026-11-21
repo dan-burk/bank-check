@@ -8,7 +8,7 @@
 # bank is encoded by line dash instead: solid = primary, dotted = the
 # comparison bank (df2). Dotted threshold/CECL lines are shapes, not
 # traces, and are unaffected. Faded dashed = all FDIC-insured banks
-# (pipeline_lines, shown only without df2).
+# (add_industry_lines; shown only without df2, and on % views only).
 
 PLT_FONT <- list(family = 'system-ui, "Segoe UI", Roboto, sans-serif')
 
@@ -241,15 +241,21 @@ scale_strip <- function(inst, sel) {
 }
 
 # Funding share lines: the mix view behind the stacked dollars. df2 = the
-# comparison bank, drawn dotted in the same series colors.
-funding_share <- function(df, df2 = NULL, from_date = as.Date("2015-01-01")) {
-  banks <- if (is.null(df2)) list(df) else list(df, df2)
+# comparison bank, drawn dotted in the same series colors. ind = the
+# industry mart: an "All banks" twin per series (add_industry_lines),
+# hidden with df2; df = NULL draws the industry lines alone.
+funding_share <- function(df, df2 = NULL, from_date = as.Date("2015-01-01"),
+                          ind = NULL) {
+  banks <- if (is.null(df)) list() else if (is.null(df2)) list(df) else list(df, df2)
   # core_pct_dep, not COREDEPR: FDIC's ratio is % of assets and would put
   # this line on a different denominator than its two chart-mates
   series <- list(
-    list(y = function(d) d$core_pct_dep,       name = "Core",      color = COL_MAIN),
-    list(y = function(d) d$bro_pct_dep,        name = "Brokered",  color = COL_ALERT),
-    list(y = function(d) 100 * d$DEPUNINS / d$DEP, name = "Uninsured", color = COL_EARLY)
+    list(y = function(d) d$core_pct_dep,       name = "Core",      color = COL_MAIN,
+         num = "COREDEP"),
+    list(y = function(d) d$bro_pct_dep,        name = "Brokered",  color = COL_ALERT,
+         num = "BRO"),
+    list(y = function(d) 100 * d$DEPUNINS / d$DEP, name = "Uninsured", color = COL_EARLY,
+         num = "DEPUNINS")
   )
   p <- plotly::plot_ly()
   for (i in seq_along(banks)) {
@@ -265,6 +271,11 @@ funding_share <- function(df, df2 = NULL, from_date = as.Date("2015-01-01")) {
         hovertemplate = "%{y}%"
       )
     }
+  }
+  if (is.null(df2)) {
+    p <- add_industry_lines(p, ind, lapply(series, function(s) {
+      list(name = s$name, color = s$color, num = s$num, den = "DEP")
+    }), from_date, alone = is.null(df), digits = 1)
   }
   base_layout(p, "% of total deposits")
 }
@@ -310,9 +321,12 @@ loan_mix <- function(df, mode = "pct", from_date = as.Date("2010-01-01")) {
 # df2 = comparison bank: allowance and noncurrent dotted, charge-off bars
 # grouped in a second muted hue. The usd view with a much larger comparison
 # bank compresses the primary; pct is the comparable view and the default.
+# ind = the industry mart: "All banks" twins of all three series, pct mode
+# only (summed industry dollars would flatten the bank) and hidden with
+# df2. df = NULL draws them alone.
 risk_cushion <- function(df, mode = "pct", df2 = NULL,
-                         from_date = as.Date("2019-01-01")) {
-  banks <- if (is.null(df2)) list(df) else list(df, df2)
+                         from_date = as.Date("2019-01-01"), ind = NULL) {
+  banks <- if (is.null(df)) list() else if (is.null(df2)) list(df) else list(df, df2)
   bar_cols <- c("#D9B8B3", "#C3CBD4")
   dds <- lapply(banks, function(b) dplyr::filter(b, date >= from_date))
   # Dollar unit pooled across BOTH banks: one axis, one unit
@@ -355,6 +369,14 @@ risk_cushion <- function(df, mode = "pct", df2 = NULL,
                         line = list(color = COL_ALERT, width = 2, dash = dash),
                         marker = mk(COL_ALERT),
                         hovertemplate = hv(paste0("Noncurrent", tag)))
+  }
+  if (mode == "pct" && is.null(df2)) {
+    p <- add_industry_lines(p, ind, list(
+      # A line, not bars: a darker shade of the bars' muted red
+      list(name = "Charge-offs", color = "#B07A72", num = "NTLNLSQ", den = "LNLSGR"),
+      list(name = "Allowance",   color = COL_MAIN,  num = "LNATRES", den = "LNLSGR"),
+      list(name = "Noncurrent",  color = COL_ALERT, num = "NCLNLS",  den = "LNLSGR")
+    ), from_date, alone = is.null(df))
   }
   p <- plotly::layout(p, barmode = "group")
   p <- base_layout(p, y_title)
@@ -455,8 +477,10 @@ add_industry_lines <- function(p, ind, series, from_date, alone,
 # Quarterly provision vs charge-offs (FDIC's quarterly fields), as
 # dollars or as % of gross loans. Same denominator for both series so the
 # bars stay comparable; matches the pct convention of the sibling charts.
-prov_nco_bars <- function(df, mode = "usd", from = 20220101) {
-  dd <- dplyr::filter(df, RISDATE >= from)
+# ind = the industry mart: "All banks" lines over the bars, pct mode only;
+# df = NULL draws the lines alone.
+prov_nco_bars <- function(df, mode = "usd", from = 20220101, ind = NULL) {
+  dd <- if (is.null(df)) df else dplyr::filter(df, RISDATE >= from)
   if (mode == "pct") {
     prov <- round(100 * dd$ELNATQ / dd$gross_lns, 3)
     nco  <- round(100 * dd$NTLNLSQ / dd$gross_lns, 3)
@@ -468,16 +492,35 @@ prov_nco_bars <- function(df, mode = "usd", from = 20220101) {
     y_title <- paste0("Quarterly flow (", sc$unit, ")")
     hv <- paste0("$%{y}", sc$letter)
   }
-  p <- plotly::plot_ly(dd, x = ~qlab) |>
-    plotly::add_bars(y = prov, name = "Provision",
-                     marker = list(color = COL_MAIN),
-                     hovertemplate = hv) |>
-    plotly::add_bars(y = nco, name = "Charge-offs",
-                     marker = list(color = COL_ALERT),
-                     hovertemplate = hv) |>
-    plotly::layout(barmode = "group",
-                   xaxis = list(categoryorder = "array",
-                                categoryarray = dd$qlab))
+  p <- plotly::plot_ly()
+  if (!is.null(dd)) {
+    p <- p |>
+      plotly::add_bars(x = dd$qlab, y = prov, name = "Provision",
+                       marker = list(color = COL_MAIN),
+                       hovertemplate = hv) |>
+      plotly::add_bars(x = dd$qlab, y = nco, name = "Charge-offs",
+                       marker = list(color = COL_ALERT),
+                       hovertemplate = hv)
+  }
+  # Quarter labels as derive() writes qlab, so lines and bars share the
+  # category axis, ordered by date across both
+  qlab <- function(d) paste0("Q", (as.integer(format(d, "%m")) - 1) %/% 3 + 1,
+                             "'", format(d, "%y"))
+  from_date <- as.Date(as.character(from), "%Y%m%d")
+  dates <- if (is.null(dd)) as.Date(character(0)) else dd$date   # c(NULL, Date) drops the class
+  if (mode == "pct") {
+    p <- add_industry_lines(p, ind, list(
+      list(name = "Provision",   color = COL_MAIN,  num = "ELNATQ",  den = "LNLSGR"),
+      list(name = "Charge-offs", color = COL_ALERT, num = "NTLNLSQ", den = "LNLSGR")
+    ), from_date, alone = is.null(df), digits = 3, x = qlab)
+    if (!is.null(ind)) {
+      idates <- as.Date(as.character(ind$RISDATE), "%Y%m%d")
+      dates <- c(dates, idates[idates >= from_date])
+    }
+  }
+  p <- plotly::layout(p, barmode = "group",
+                      xaxis = list(categoryorder = "array",
+                                   categoryarray = qlab(sort(unique(dates)))))
   base_layout(p, y_title, "Quarter")
 }
 
