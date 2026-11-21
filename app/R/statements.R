@@ -172,8 +172,8 @@ STATEMENT_FIELDS <- paste0(
   "COREDEP,BRO,DEPUNINS,VOLIAB,OTHBFHLB,",
   # Securities at amortized cost and fair value (unrealized loss / equity)
   "SCAA,SCAF,SCHA,SCHF,",
-  # Concentration numerators
-  "LNAG,LNRECONS,LNRENRES"
+  # Concentration numerators, plus the rest of the Loan Mix bands
+  "LNAG,LNRECONS,LNRENRES,LNRE,LNCI,LNREMULT"
 )
 
 # A field counts for the industry only if the banks reporting it (a

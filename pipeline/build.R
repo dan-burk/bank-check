@@ -373,6 +373,9 @@ IND_BOUNDS <- utils::read.table(header = TRUE, text = "
   LNAG                 ASSET   0      20  # 0.3-0.5
   LNRECONS             ASSET   0      20  # 1.4-4.9
   LNRENRES             ASSET   0      30  # 4.8-8.3
+  LNRE                 LNLSGR  0     100
+  LNCI                 LNLSGR  0     100
+  LNREMULT             LNRE    0     100
 ", comment.char = "#")
 for (i in seq_len(nrow(IND_BOUNDS))) {
   b <- IND_BOUNDS[i, ]

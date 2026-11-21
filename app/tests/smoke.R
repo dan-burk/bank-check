@@ -310,6 +310,61 @@ ok("loan_mix pct", loan_mix(dac))
 ok("loan_mix usd", loan_mix(dac, mode = "usd"))
 ok("funding_share", funding_share(dac))
 ok("funding_share df2", funding_share(dac, df2 = fbt))
+
+# Fixed charts' "All banks" lines (ind_full: present whatever mart is on
+# disk): which modes draw them, with a comparison bank or alone, values
+# = summed dollars / summed denominator at the chart's rounding
+nm_all <- function(p) grep("All banks", pl_names(p), value = TRUE)
+fx <- list(
+  list(f = function(...) risk_cushion(...), digits = 2, den = "LNLSGR",
+       lines = c("Charge-offs" = "NTLNLSQ", "Allowance" = "LNATRES", "Noncurrent" = "NCLNLS"),
+       from = as.Date("2019-01-01"), df2 = TRUE, usd = TRUE),
+  list(f = function(...) prov_nco_bars(...), digits = 3, den = "LNLSGR",
+       lines = c("Provision" = "ELNATQ", "Charge-offs" = "NTLNLSQ"),
+       from = as.Date("2022-01-01"), df2 = FALSE, usd = TRUE),
+  list(f = function(df, mode = "pct", ...) funding_share(df, ...), digits = 1, den = "DEP",
+       lines = c("Core" = "COREDEP", "Brokered" = "BRO", "Uninsured" = "DEPUNINS"),
+       from = as.Date("2015-01-01"), df2 = TRUE, usd = FALSE)
+)
+for (x in fx) {
+  want <- paste(names(x$lines), "- All banks")
+  stopifnot(identical(nm_all(x$f(dac, mode = "pct", ind = ind_full)), want),
+            identical(nm_all(x$f(NULL, mode = "pct", ind = ind_full)), want),
+            length(nm_all(x$f(dac, mode = "pct"))) == 0)            # no mart, no lines
+  if (x$usd) stopifnot(length(nm_all(x$f(dac, mode = "usd", ind = ind_full))) == 0)
+  if (x$df2) stopifnot(length(nm_all(x$f(dac, mode = "pct", df2 = fbt, ind = ind_full))) == 0)
+  # Values, alone (solid) and beside a bank (dashed): same numbers
+  w <- ind_full[order(ind_full$RISDATE), ]
+  w <- w[as.Date(as.character(w$RISDATE), "%Y%m%d") >= x$from, ]
+  for (alone in c(TRUE, FALSE)) {
+    tr <- plotly::plotly_build(x$f(if (alone) NULL else dac, mode = "pct", ind = ind_full))$x$data
+    for (k in names(x$lines)) {
+      t <- Filter(function(t) identical(t$name, paste(k, "- All banks")), tr)[[1]]
+      stopifnot(identical(t$line$dash, if (alone) "solid" else "dash"),
+                isTRUE(all.equal(as.numeric(unlist(t$y)),
+                                 round(100 * w[[x$lines[[k]]]] / w[[x$den]], x$digits))))
+    }
+  }
+}
+# Provision: lines share the bars' category axis, ordered by date
+pp <- plotly::plotly_build(prov_nco_bars(dac, mode = "pct", ind = ind_full))
+ca <- pp$x$layout$xaxis$categoryarray
+stopifnot(all(unlist(pp$x$data[[3]]$x) %in% ca), all(dac$qlab[dac$RISDATE >= 20220101] %in% ca),
+          identical(ca[1], "Q1'22"))
+cat("ok: risk_cushion, prov_nco_bars, funding_share All banks lines\n")
+# Loan Mix: industry bands (dashed edges beside a bank, filled alone), % only;
+# each band = summed field / summed gross loans
+lm_all <- function(...) Filter(function(t) grepl("- All banks$", t$name),
+                               plotly::plotly_build(loan_mix(...))$x$data)
+lb <- lm_all(dac, ind = ind_full); la <- lm_all(NULL, ind = ind_full)
+w <- ind_full[order(ind_full$RISDATE), ]
+w <- w[as.Date(as.character(w$RISDATE), "%Y%m%d") >= as.Date("2010-01-01"), ]
+stopifnot(length(lb) == 7, length(la) == 7,
+          identical(lb[[1]]$line$dash, "dash"), identical(la[[1]]$fillcolor, "#009E73"),
+          isTRUE(all.equal(as.numeric(unlist(la[[6]]$y)), round(100 * w$LNCI / w$LNLSGR, 2))),
+          length(lm_all(dac, mode = "usd", ind = ind_full)) == 0,
+          length(lm_all(dac)) == 0)
+cat("ok: loan_mix All banks bands\n")
 # Funding Mix Core line = COREDEP/DEP, sharing the deposits denominator
 # with Brokered and Uninsured (FDIC's COREDEPR is % of ASSETS, not deposits)
 pf_core <- plotly::plotly_build(funding_share(dac))
@@ -399,6 +454,28 @@ shiny::testServer(app = "app", {
   stopifnot(grepl("Search for a bank", conditionMessage(e)),
             !grepl("All banks", output$cap_caveat$html))
   cat("ok: explorers and sens_plot industry-only before any pick\n")
+  # Reserves and Funding Mix: industry lines alone on the % views (if the
+  # mart has their columns); rc and funding carry the prompt in their note
+  session$setInputs(rc_mode = "pct", prov_mode = "pct")
+  fixed_nb <- list(list("rc_plot", "rc_note", c("NTLNLSQ", "LNATRES", "NCLNLS", "LNLSGR"), TRUE),
+                   list("prov_plot", "prov_note", c("ELNATQ", "NTLNLSQ", "LNLSGR"), FALSE),
+                   list("funding_share_plot", "funding_note", c("COREDEP", "BRO", "DEPUNINS", "DEP"), TRUE))
+  for (f in fixed_nb) {
+    if (all(f[[3]] %in% names(ind))) {
+      pj <- jsonlite::fromJSON(output[[f[[1]]]], simplifyVector = FALSE)
+      stopifnot(all(grepl("- All banks$", vapply(pj$x$data, `[[`, "", "name"))),
+                grepl("All FDIC-insured banks", output[[f[[2]]]]$html),
+                grepl("Search for a bank", output[[f[[2]]]]$html) == f[[4]])
+    } else if (f[[4]]) {
+      e <- tryCatch({ output[[f[[1]]]]; NULL }, error = function(e) e)
+      stopifnot(grepl("Search for a bank", conditionMessage(e)))
+    }
+  }
+  session$setInputs(rc_mode = "usd")       # $ view: no industry, prompt on the chart
+  e <- tryCatch({ output$rc_plot; NULL }, error = function(e) e)
+  stopifnot(grepl("Search for a bank", conditionMessage(e)), is.null(output$rc_note$html))
+  session$setInputs(rc_mode = "pct")
+  cat("ok: rc, prov, funding industry-only before any pick\n")
 
   traj_picks <- as.character(head(FAIL_META$CERT, 3))
   session$setInputs(
@@ -463,10 +540,18 @@ shiny::testServer(app = "app", {
   cat("ok output: prov_plot usd\n")
 
   # Industry lines (and their footer note) only without a comparison bank
-  stopifnot(!grepl("Dashed", output$pipeline_note$html))
+  stopifnot(!grepl("Dashed", output$pipeline_note$html),
+            is.null(output$rc_note$html), is.null(output$funding_note$html))
   session$setInputs(compare = character(0))
   stopifnot(is.null(cmp()), !is.null(output$pipeline_plot),
             grepl("Dashed = all FDIC-insured banks", output$pipeline_note$html))
+  if ("NTLNLSQ" %in% names(ind)) {
+    session$setInputs(rc_mode = "pct", prov_mode = "pct")
+    rj <- jsonlite::fromJSON(output$rc_plot, simplifyVector = FALSE)
+    stopifnot(sum(grepl("All banks", vapply(rj$x$data, function(t) t$name %||% "", ""))) == 3,
+              grepl("Dashed = all FDIC-insured banks", output$rc_note$html),
+              grepl("Dashed = all FDIC-insured banks", output$prov_note$html))
+  }
   cat("ok output: pipeline_note shown only without a comparison bank\n")
 
   # Directory modal: table renders with one row per active bank, and a

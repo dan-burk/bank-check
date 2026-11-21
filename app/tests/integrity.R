@@ -446,6 +446,31 @@ for (sec in names(ih)) {
   }
 }
 
+# Reserves and Funding Mix "All banks" lines, no bank picked (the full
+# window): summed dollars / summed denominator at each chart's rounding.
+# Provision is on a category axis keyed by quarter label, rebuilt here.
+iq <- ind[order(ind$RISDATE), ]
+iq_date <- as.Date(as.character(iq$RISDATE), "%Y%m%d")
+iq_lab <- paste0("Q", (as.integer(substr(iq$RISDATE, 5, 6)) - 1) %/% 3 + 1,
+                 "'", substr(iq$RISDATE, 3, 4))
+fixed <- list(
+  list("risk_cushion", risk_cushion(NULL, ind = ind), "LNLSGR", 2, "2019-01-01", FALSE,
+       c("Charge-offs" = "NTLNLSQ", "Allowance" = "LNATRES", "Noncurrent" = "NCLNLS")),
+  list("prov_nco_bars", prov_nco_bars(NULL, mode = "pct", ind = ind), "LNLSGR", 3, "2022-01-01", TRUE,
+       c("Provision" = "ELNATQ", "Charge-offs" = "NTLNLSQ")),
+  list("funding_share", funding_share(NULL, ind = ind), "DEP", 1, "2015-01-01", FALSE,
+       c("Core" = "COREDEP", "Brokered" = "BRO", "Uninsured" = "DEPUNINS")))
+for (f in fixed) {
+  w <- iq_date >= as.Date(f[[5]])
+  bt <- built_traces(f[[2]])
+  for (k in names(f[[7]])) {
+    nm <- paste(k, "- All banks")
+    if (is.null(ind[[f[[7]][[k]]]])) { cat("SKIPPED:", f[[1]], nm, "\n"); next }
+    expect_trace(paste(f[[1]], nm), bt, nm, if (f[[6]]) iq_lab[w] else iq_date[w],
+                 round(100 * iq[[f[[7]][[k]]]][w] / iq[[f[[3]]]][w], f[[4]]))
+  }
+}
+
 # The mart's newest row is the raw cross-section summed: every summed
 # field, unless coverage made it NA
 nr <- ind[ind$RISDATE == XS_RISDATE, ]
