@@ -146,6 +146,26 @@ bt <- Filter(function(t) identical(t$name, "Bonds"),
 by <- unlist(bt$y)
 stopifnot(sum(!is.na(by)) == sum(!is.na(ind$SC)) - 1, !any(by == 0, na.rm = TRUE))
 cat("ok: missing coverage is NA (\"–\" in tables, gaps in charts), never 0\n")
+# Only the totals are drawn, listed first; expenses and provision are positive
+for (u in c("usd", "pct")) {
+  tr <- plotly::plotly_build(industry_history(ind_long, "is", u))$x$data
+  shown <- vapply(tr, function(t) isTRUE(t$visible), TRUE)
+  stopifnot(identical(vapply(tr[shown], `[[`, "", "name"),
+                      c("Revenue", "Expenses (subtracted)",
+                        "Loan loss provision (subtracted)", "Net income")),
+            all(vapply(tr[!shown], `[[`, "", "visible") == "legendonly"))
+  bs <- plotly::plotly_build(industry_history(ind_long, "bs", u))$x$data
+  stopifnot(identical(vapply(Filter(function(t) isTRUE(t$visible), bs), `[[`, "", "name"),
+                      c("Total assets", "Total liabilities", "Equity (owners)")),
+            length(bs) == 11)
+  ex <- unlist(Filter(function(t) t$name == "Expenses (subtracted)", tr)[[1]]$y)
+  is_l <- ind_long[ind_long$section == "is", ]
+  div <- if (u == "pct") 1 else usd_axis_unit(is_l$value)$div
+  want <- is_l[is_l$label == "Expenses", if (u == "pct") "pct" else "value"] / div
+  stopifnot(all(ex > 0, na.rm = TRUE),   # plotly drops leading NA points
+            isTRUE(all.equal(as.numeric(ex[!is.na(ex)]), -want[!is.na(want)])))
+}
+cat("ok: industry history shows only totals; expenses drawn positive\n")
 
 # industry_long() (one vectorized statement_lines() call) equals the old
 # per-quarter loop, NA gaps and quarters missing from the mart included
