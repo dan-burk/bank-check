@@ -47,7 +47,7 @@ The delinquency pipeline, in order: current -> 30-89 days late (P3LNLS) -> 90+ d
 | NTLNLSR / NTLNLSQR | Net charge-offs / loans, annualized | % | YTD / single-quarter versions. |
 | LNATRES | Allowance for credit losses | $K | The rainy-day fund for bad loans. Since each bank's CECL adoption (2023-01-01 for non-SEC filers like Dacotah) this is the ACL under ASC 326: lifetime expected losses on the whole book, not incurred losses. Same field code across the regime change; the definition underneath moved. Coverage below 1x of noncurrent is not mechanically underprovisioning (secured ag/CRE LGD runs 20-40%), but falling coverage against rising noncurrent is. |
 | LNATRESR | Allowance / gross loans | % | Compare to NCLNLSR: allowance below noncurrent means the fund does not cover known problems. |
-| RSLNLS / RSLNLSR | Restructured (modified) loans, $ and % | $K / % | Extend-and-pretend lives here. A loan reworked to avoid default counts as current but signals borrower distress. Rising RSLNLSR with flat NCLNLSR is a tell. |
+| RSLNLS / RSLNLSR | Restructured (modified) loans, $ and % of total assets | $K / % | Extend-and-pretend lives here. A loan reworked to avoid default counts as current but signals borrower distress. Rising RSLNLSR with flat NCLNLSR is a tell. |
 | ELNATR | Provision for credit losses, YTD | $K | Management's estimate, and management chooses the timing. |
 | ELNATQ | Provision for credit losses, quarter | $K | FDIC's own quarterly figure; what the charts plot. Same caveat as NTLNLSQ. |
 | ELNATRY / ELNATRYQ | Provision / avg assets, annualized | % | Provision spikes usually lag the actual deterioration. |
@@ -60,10 +60,12 @@ Games to watch: (1) provision timing is discretionary; under-provisioning flatte
 |---|---|---|---|
 | LNRE | Total real-estate loans | $K | |
 | LNCI | Commercial & industrial loans | $K | |
-| LNAG / LNAGR | Agricultural loans, $ and % of loans | $K / % | Dacotah's book; ag failures cluster with farm-income cycles. |
+| LNAG / LNAGR | Agricultural loans, $ and % of total assets | $K / % | Dacotah's book; ag failures cluster with farm-income cycles. |
 | LNRECONS / LNRECONSR | Construction & land development | $K / % | The classic failure accelerant: 2008-2012 failures were soaked in construction lending. |
 | LNRENRES / LNRENRESR | Nonfarm nonresidential (CRE) | $K / % | Regulatory concern threshold is CRE > 300% of capital. |
 | LNREMULT / LNREMULTR | Multifamily | $K / % | |
+
+The `R` ratios in this table (and RSLNLSR) are % of **total assets**, not of loans: `100 * LNAG / ASSET` reproduces FDIC's LNAGR exactly for every 2026 Q2 filer, and the same holds for the other four. Divide by LNLSGR yourself for a share of the loan book.
 
 ## E: Earnings
 
