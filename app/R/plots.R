@@ -7,7 +7,8 @@
 # pipeline_lines, risk_cushion): color follows the SERIES there, so the
 # bank is encoded by line dash instead: solid = primary, dotted = the
 # comparison bank (df2). Dotted threshold/CECL lines are shapes, not
-# traces, and are unaffected.
+# traces, and are unaffected. Faded dashed = all FDIC-insured banks
+# (pipeline_lines, shown only without df2).
 
 PLT_FONT <- list(family = 'system-ui, "Segoe UI", Roboto, sans-serif')
 
@@ -354,12 +355,18 @@ risk_cushion <- function(df, mode = "pct", df2 = NULL,
 # transition data ever shows up.
 
 # Delinquency pipeline lines. df2 = comparison bank, dotted, no markers.
-pipeline_lines <- function(df, df2 = NULL, from_date = as.Date("2019-01-01")) {
+# ind = industry_quarterly mart: each series gets a faded dashed "All banks"
+# twin, summed dollars / summed gross loans (never a mean of bank ratios).
+# Percent only, so no dollar rescaling. Hidden when df2 is set (nine lines
+# is too many). A mart built before P3LNLS/NCLNLS were summed just skips
+# those two lines.
+pipeline_lines <- function(df, df2 = NULL, from_date = as.Date("2019-01-01"),
+                           ind = NULL) {
   banks <- if (is.null(df2)) list(df) else list(df, df2)
   series <- list(
-    list(col = "p3_pct",   name = "30-89 days late", color = COL_EARLY),
-    list(col = "NCLNLSR",  name = "Noncurrent",      color = COL_ALERT),
-    list(col = "LNATRESR", name = "Allowance",       color = COL_MAIN)
+    list(col = "p3_pct",   name = "30-89 days late", color = COL_EARLY, ind = "P3LNLS"),
+    list(col = "NCLNLSR",  name = "Noncurrent",      color = COL_ALERT, ind = "NCLNLS"),
+    list(col = "LNATRESR", name = "Allowance",       color = COL_MAIN,  ind = "LNATRES")
   )
   p <- plotly::plot_ly()
   for (i in seq_along(banks)) {
@@ -383,6 +390,21 @@ pipeline_lines <- function(df, df2 = NULL, from_date = as.Date("2019-01-01")) {
           hovertemplate = "%{y}%"
         )
       }
+    }
+  }
+  if (!is.null(ind) && is.null(df2)) {
+    ii <- ind[order(ind$RISDATE), ]
+    ii$date <- as.Date(as.character(ii$RISDATE), format = "%Y%m%d")
+    ii <- ii[ii$date >= from_date, ]
+    for (s in series) {
+      if (is.null(ii[[s$ind]])) next
+      p <- plotly::add_trace(
+        p, x = ii$date, y = round(100 * ii[[s$ind]] / ii$LNLSGR, 2),
+        name = paste0(s$name, " - All banks"),
+        type = "scatter", mode = "lines", opacity = 0.5,
+        line = list(color = s$color, width = 1.5, dash = "dash"),
+        hovertemplate = "%{y}%"
+      )
     }
   }
   base_layout(p, "% of gross loans")

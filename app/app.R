@@ -294,6 +294,7 @@ ui <- page_navbar(
                                  "Noncurrent = 90+ days past due or on ",
                                  "nonaccrual*. The allowance* should cover ",
                                  "the red line.")),
+                      uiOutput("pipeline_note"),
                       star_line("Gross loans: all loans before subtracting the allowance"),
                       star_line("Nonaccrual: loans the bank stopped booking interest on because full collection is doubtful"),
                       star_line("Allowance: money set aside for expected loan losses"))
@@ -691,7 +692,11 @@ server <- function(input, output, session) {
   # prov_plot shares the Reserves screen with rc_plot, so it stays silent ----
   output$pipeline_plot <- renderPlotly({
     bank_gate()
-    pipeline_lines(cur(), df2 = cmp())
+    pipeline_lines(cur(), df2 = cmp(), ind = INDUSTRY)
+  })
+  # Industry lines are drawn only without a comparison bank
+  output$pipeline_note <- renderUI({
+    if (is.null(cmp())) div("Dashed = all FDIC-insured banks (their loans combined).")
   })
   output$rc_plot <- renderPlotly({
     bank_gate()
