@@ -93,7 +93,8 @@ jobs:
 
   deploy-shinyapps:
     needs: test
-    if: github.event_name != 'pull_request'
+    # Deploys only from main; PRs and manual runs elsewhere stop at the test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     concurrency:
       group: shinyapps
@@ -154,7 +155,8 @@ jobs:
   # not from DESCRIPTION — the smoke-tested R code is what's exported.
   build-pages:
     needs: test
-    if: github.event_name != 'pull_request'
+    # Deploys only from main; PRs and manual runs elsewhere stop at the test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -206,6 +208,7 @@ jobs:
 
   deploy-pages:
     needs: build-pages
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
       pages: write

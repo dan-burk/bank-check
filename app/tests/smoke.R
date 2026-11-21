@@ -24,8 +24,15 @@ inst <- snapshot_institutions(snap)
 PEER <- peer_stats(snapshot_cross_section(snap), FIELDS_META)
 stopifnot(nrow(inst) > 3000, !anyNA(inst$NAME))
 ind <- load_industry()
-stopifnot(nrow(ind) >= 5, !is.unsorted(rev(ind$RISDATE)),
-          ind$RISDATE[1] == max(snap$RISDATE, na.rm = TRUE))
+stopifnot(!is.unsorted(rev(ind$RISDATE)), !anyDuplicated(ind$RISDATE),
+          ind$RISDATE[1] == max(snap$RISDATE, na.rm = TRUE),
+          min(ind$RISDATE) == 19840331,
+          nrow(ind) >= 170)  # floor, not exact: grows by one each quarter
+# Full history, contiguous: every quarter-end from 1984 Q1 to the newest
+want <- max(ind$RISDATE)
+while (want[length(want)] > 19840331) want <- c(want, prev_quarter_end(want[length(want)]))
+gaps <- setdiff(want, ind$RISDATE)
+if (length(gaps)) stop("industry_quarterly is missing quarters: ", paste(gaps, collapse = ", "))
 cat("marts: snapshot", nrow(snap), "banks,", nrow(inst), "active; industry",
     nrow(ind), "quarters\n")
 stopifnot(nrow(PEER) >= 15, all(c("p25", "p50", "p75") %in% names(PEER)))
