@@ -31,6 +31,9 @@ XS_RD <- max(as.integer(as.character(XS$RISDATE)), na.rm = TRUE)
 rm(XS)
 INDUSTRY <- load_industry()
 IND_LONG <- industry_long(INDUSTRY)   # both Industry charts filter this
+# Explicit, not bindCache's default "app" cache: shinylive never sets that
+# one up, so the default errors in the browser build
+IND_CACHE <- cachem::cache_mem()
 
 # All post-2000 failures (built by app/build/build_fail_panel.R)
 FAIL_PANEL <- load_fail_panel()
@@ -237,7 +240,7 @@ ui <- page_navbar(
     div(id = "fetch_overlay",
         div(class = "box",
             div(class = "spinner"),
-            div(class = "headline", "Fetching from FDIC..."),
+            div(class = "headline", "Fetching from FDIC…"),
             div(class = "joke", ""))),
     # Boot overlay: branded screen until the first render finishes (app.js)
     div(id = "boot_overlay",
@@ -289,15 +292,15 @@ ui <- page_navbar(
       uiOutput("ind_caption"),
       layout_columns(
         col_widths = breakpoints(xs = 12, lg = c(6, 6)),
-        div(tags$h6("Balance sheet"), uiOutput("ind_bs_table")),
-        div(tags$h6("Income statement"), uiOutput("ind_is_table")))
+        div(tags$h6("Balance Sheet"), uiOutput("ind_bs_table")),
+        div(tags$h6("Income Statement"), uiOutput("ind_is_table")))
     ),
     # Every quarter in the mart; follows the $/% toggle above
-    card(card_header("Balance sheet over time"),
+    card(card_header("Balance Sheet Over Time"),
          plotlyOutput("ind_bs_plot", height = "420px"),
          div(class = "text-muted small",
              "Quarter-end, nominal dollars. The allowance (−) is drawn as a positive amount.")),
-    card(card_header("Income statement over time"),
+    card(card_header("Income Statement Over Time"),
          plotlyOutput("ind_is_plot", height = "420px"),
          div(class = "text-muted small",
              "Quarterly, nominal dollars. Subtracted (−) items are drawn as positive amounts.",
@@ -331,7 +334,7 @@ ui <- page_navbar(
         "Reserves",
         layout_columns(
           col_widths = breakpoints(xs = c(12, 12), lg = c(6, 6)),
-          card(mode_header("Risk vs Cushion", "rc_mode"),
+          card(mode_header("Risk Vs Cushion", "rc_mode"),
                plotlyOutput("rc_plot", height = "400px"),
                card_footer(class = "text-muted small",
                            div(paste0("The allowance* should cover the ",
@@ -345,7 +348,7 @@ ui <- page_navbar(
                                             "the largest banks) the allowance covers expected ",
                                             "lifetime losses, so the line can jump without ",
                                             "new trouble")))),
-          card(mode_header("Provision vs Charge-offs", "prov_mode"),
+          card(mode_header("Provision Vs Charge-Offs", "prov_mode"),
                plotlyOutput("prov_plot", height = "400px"),
                card_footer(class = "text-muted small",
                            div(paste0("Provision* adds to the allowance; ",
@@ -359,7 +362,7 @@ ui <- page_navbar(
       nav_panel(
         "Loan Mix",
         card(
-          mode_header("What the Bank Lends Against", "mix_mode"),
+          mode_header("What The Bank Lends Against", "mix_mode"),
           plotlyOutput("mix_plot", height = "440px"),
           card_footer(class = "text-muted small",
                       div(paste0("Each band is a share of the loan book. ",
@@ -382,7 +385,7 @@ ui <- page_navbar(
       nav_panel(
         "Funding Mix",
         card(
-          chip_header("Where the Money Comes From", "Liquidity & Funding"),
+          chip_header("Where The Money Comes From", "Liquidity & Funding"),
           plotlyOutput("funding_share_plot", height = "440px"),
           card_footer(class = "text-muted small",
                       div(paste0("Each line is a share of total deposits. ",
@@ -409,7 +412,7 @@ ui <- page_navbar(
   ),
 
   nav_panel(
-    "Compare to Failures",
+    "Compare To Failures",
     layout_columns(
       col_widths = breakpoints(xs = c(12, 12), lg = c(3, 9)),
       card(
@@ -442,7 +445,7 @@ ui <- page_navbar(
     "Dictionary",
     # fill = FALSE: a fill-mode DT inside a card with no fixed height
     # collapses to a zero-height flex item
-    card(card_header("Every Metric in the App"),
+    card(card_header("Every Metric In The App"),
          DT::DTOutput("dict_table", fill = FALSE)),
     card(card_header("Full Dictionary"),
          div(class = "dict-md p-3", uiOutput("dict_full")))
@@ -622,7 +625,7 @@ server <- function(input, output, session) {
   output$overview_grid <- renderUI({
     req(has_bank())
     tagList(
-      card(chip_header("Every FDIC Bank by Size", "Size"),
+      card(chip_header("Every FDIC Bank By Size", "Size"),
            plotlyOutput("scale_plot", height = "200px")),
       card(
         card_header(
@@ -635,8 +638,8 @@ server <- function(input, output, session) {
                            choices = c("QoQ" = "qoq", "YoY" = "yoy")))),
         layout_columns(
           col_widths = breakpoints(xs = 12, lg = c(6, 6)),
-          div(tags$h6("Balance sheet"), uiOutput("bs_table")),
-          div(tags$h6("Income statement"), uiOutput("is_table")))
+          div(tags$h6("Balance Sheet"), uiOutput("bs_table")),
+          div(tags$h6("Income Statement"), uiOutput("is_table")))
       )
     )
   })
@@ -679,13 +682,22 @@ server <- function(input, output, session) {
         paste0("All ", format(now$n_banks, big.mark = ","),
                " FDIC-insured banks combined, ", quarter_name(now$RISDATE), "."))
   })
+  # The Industry outputs depend only on the shipped mart and the toggles, so
+  # they are cached app-wide: building and serializing the two history charts
+  # (20 traces over every quarter since 1984) is the bulk of the tab's lag.
+  # The section is in each key: both tables share one renderUI expression,
+  # so without it they would collide and serve each other's cached HTML.
   output$ind_bs_table <- statement_ui("bs", industry, "ind_unit", "ind_cmp",
-                                      links = FALSE)
+                                      links = FALSE) |>
+    bindCache("bs", input$ind_unit, input$ind_cmp, cache = IND_CACHE)
   output$ind_is_table <- statement_ui("is", industry, "ind_unit", "ind_cmp",
-                                      links = FALSE)
+                                      links = FALSE) |>
+    bindCache("is", input$ind_unit, input$ind_cmp, cache = IND_CACHE)
   ind_unit <- reactive(if (is.null(input$ind_unit)) "usd" else input$ind_unit)
-  output$ind_bs_plot <- renderPlotly(industry_history(IND_LONG, "bs", ind_unit()))
-  output$ind_is_plot <- renderPlotly(industry_history(IND_LONG, "is", ind_unit()))
+  output$ind_bs_plot <- renderPlotly(industry_history(IND_LONG, "bs", ind_unit())) |>
+    bindCache("bs", ind_unit(), cache = IND_CACHE)
+  output$ind_is_plot <- renderPlotly(industry_history(IND_LONG, "is", ind_unit())) |>
+    bindCache("is", ind_unit(), cache = IND_CACHE)
 
   # Scoped explorers, one per category page ----
   for (id in names(EXPLORERS)) local({
@@ -802,7 +814,7 @@ server <- function(input, output, session) {
 
   output$traj_title <- renderText({
     paste0(FIELDS_META$label[FIELDS_META$code == input$traj_metric],
-           ", aligned on failure date")
+           ", Aligned On Failure Date")
   })
   output$traj_plot <- renderPlotly({
     bank_gate()

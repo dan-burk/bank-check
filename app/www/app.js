@@ -21,10 +21,10 @@
     'Dad, are we rich? No son, we are FDIC insured.'
   ];
   var timer = null;
-  Shiny.addCustomMessageHandler('fetch_overlay', function(msg) {
+  function overlay(show) {
     var el = document.getElementById('fetch_overlay');
     var jokeEl = el.querySelector('.joke');
-    if (msg.show) {
+    if (show) {
       var i = Math.floor(Math.random() * jokes.length);
       jokeEl.textContent = jokes[i];
       el.style.display = 'flex';
@@ -37,6 +37,28 @@
       el.style.display = 'none';
       if (timer) { clearInterval(timer); timer = null; }
     }
+  }
+  Shiny.addCustomMessageHandler('fetch_overlay', function(msg) { overlay(msg.show); });
+
+  // Industry tab: its outputs are suspended while hidden, so the first visit
+  // builds both history charts then. Cover that wait with the same overlay,
+  // until both charts have arrived (30s fallback if one errors silently).
+  var pending = { ind_bs_plot: true, ind_is_plot: true };
+  var fallback = null;
+  function done() {
+    if (pending.ind_bs_plot || pending.ind_is_plot) return;
+    clearTimeout(fallback);
+    setTimeout(function() { overlay(false); }, 300);  // plotly draws just after
+  }
+  $(document).on('shiny:value shiny:error', function(e) {
+    if (!(e.name in pending) || !pending[e.name]) return;
+    pending[e.name] = false;
+    done();
+  });
+  $(document).on('shown.bs.tab', '.navbar [data-value="Industry"]', function() {
+    if (!pending.ind_bs_plot && !pending.ind_is_plot) return;
+    overlay(true);
+    fallback = setTimeout(function() { overlay(false); }, 30000);
   });
 })();
 

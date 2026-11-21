@@ -1,4 +1,4 @@
-# Build the all-failures panel for the Compare to Failures tab: pre-failure
+# Build the all-failures panel for the Compare To Failures tab: pre-failure
 # quarterly histories for every FDIC failure since 2000, plus a metadata
 # table (region, size bucket, display label) for the app's filters.
 #
