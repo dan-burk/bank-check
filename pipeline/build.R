@@ -205,20 +205,21 @@ if (length(revisions)) {
 # ---- Marts: industry_quarterly, field_coverage -----------------------------
 # Built from every raw quarter on disk (not just this run), with the app's
 # own industry_totals() so the numbers match the Industry tab exactly.
-# raw_sums are plain sums for the aggregation cross-check below.
-AGG_FIELDS <- c("ASSET", "LIAB", "EQTOT", "DEP", "NETINCQ",
-                "LNLSGR", "P3LNLS", "NCLNLS")
+# raw_sums are plain sums for the aggregation cross-check below: every
+# summed field, so each mart column is checked against FDIC's own sums.
+AGG_FIELDS <- setdiff(strsplit(STATEMENT_FIELDS, ",")[[1]], c("CERT", "RISDATE"))
 files <- sort(list.files(RAW, pattern = "^risdate\\.\\d{8}\\.parquet$",
                          full.names = TRUE), decreasing = TRUE)
 ind <- list(); cov <- list(); raw_sums <- list()
 for (f in files) {
   x <- as.data.frame(read_parquet(f))
+  miss <- setdiff(AGG_FIELDS, names(x))
+  if (length(miss)) stop(basename(f), " lacks summed fields: ", paste(miss, collapse = ","))
   ind[[f]] <- industry_totals(x)
   cov[[f]] <- field_coverage(x)
   raw_sums[[f]] <- data.frame(
     RISDATE = as.integer(x$RISDATE[1]), n = nrow(x),
-    as.list(colSums(x[AGG_FIELDS], na.rm = TRUE)),
-    NETINC = sum(x$NETINC, na.rm = TRUE))
+    as.list(colSums(x[AGG_FIELDS], na.rm = TRUE)))
 }
 ind <- do.call(rbind, ind); cov <- do.call(rbind, cov)
 raw_sums <- do.call(rbind, raw_sums)
@@ -254,11 +255,16 @@ for (k in AGG_FIELDS) {
   agg_ok <- agg_ok & !is.na(a) & abs(a - b) <= 1e-9 * pmax(1, abs(b))
 }
 
-# Cross-check 2: in Q1, quarterly net income is the year to date
+# Cross-check 2: in Q1, the quarterly flow is the year to date (net
+# income, net charge-offs)
 q1 <- raw_sums$RISDATE %% 10000L == 331L
-q1_gap <- abs(raw_sums$NETINCQ - raw_sums$NETINC) / pmax(1, abs(raw_sums$NETINC))
-q1_bad <- raw_sums$RISDATE[q1 & q1_gap > 0.001]
-if (length(q1_bad)) cat("Q1 NETINCQ != NETINC (>0.1%):", q1_bad, "\n")
+q1_bad <- integer(0)
+for (k in list(c("NETINCQ", "NETINC"), c("NTLNLSQ", "NTLNLS"))) {
+  q1_gap <- abs(raw_sums[[k[1]]] - raw_sums[[k[2]]]) / pmax(1, abs(raw_sums[[k[2]]]))
+  bad <- raw_sums$RISDATE[q1 & q1_gap > 0.001]
+  if (length(bad)) cat("Q1", k[1], "!=", k[2], "(>0.1%):", bad, "\n")
+  q1_bad <- union(q1_bad, bad)
+}
 
 # The quarter sequence must have no holes from the oldest file to newest
 want <- newest
@@ -327,7 +333,8 @@ check(all(is.na(ind[cbind(match(lowc$RISDATE, ind$RISDATE),
       "a mart value is summed over coverage below COVERAGE_MIN")
 check(all(agg_ok), paste("FDIC aggregate sums disagree for",
                          paste(raw_sums$RISDATE[!agg_ok], collapse = ",")))
-check(!any(q1_bad %in% recent), "Q1 NETINCQ != NETINC in the last 10 quarters")
+check(!any(q1_bad %in% recent), "Q1 quarterly flow != year to date in the last 10 quarters")
+check(all(AGG_FIELDS %in% names(ind)), "industry_quarterly lacks a summed field")
 check(ind$RISDATE[1] == newest && ind$n_banks[1] == nrow(filed),
       "industry newest quarter disagrees with snapshot")
 # Balance sheet identity on the summed industry: assets = liabilities +
@@ -336,14 +343,44 @@ check(ind$RISDATE[1] == newest && ind$n_banks[1] == nrow(filed),
 gap <- abs(ind$ASSET - (ind$LIAB + ind$EQTOT)) / ind$ASSET
 if (anyNA(gap)) cat("Identity skipped (LIAB/EQTOT NA):", ind$RISDATE[is.na(gap)], "\n")
 check(all(gap < 0.001, na.rm = TRUE), "industry assets != liabilities + equity")
-# Industry delinquency and allowance as % of gross loans (Delinquency
-# chart). These stay well under 10% even at their 1991 and 2010 peaks;
-# outside (0, 10%) means a unit or sum error. NA (coverage) quarters skip.
-for (k in c("P3LNLS", "NCLNLS", "LNATRES")) {
-  r <- 100 * ind[[k]] / ind$LNLSGR
-  check(all(r > 0 & r < 10, na.rm = TRUE),
-        paste0("industry ", k, "/LNLSGR outside (0, 10%) in ",
-               paste(utils::head(ind$RISDATE[which(!(r > 0 & r < 10))], 5), collapse = ",")))
+# Net loans + allowance = gross loans, summed (exact to the dollar 1984-2026)
+gap <- abs(ind$LNLSNET + ind$LNATRES - ind$LNLSGR) / ind$LNLSGR
+check(all(gap < 0.001, na.rm = TRUE), "industry LNLSNET + LNATRES != LNLSGR")
+# The industry ratios the app charts, as % of the summed denominator (num
+# may be arithmetic on mart columns). Bounds are wide on purpose: outside
+# them means a unit, sign or sum error, not a bad quarter. Observed range
+# 1984-2026 in the comment. Component <= total is the hi = 100 rows.
+# Flows are one quarter, not annualized. NA (coverage) quarters skip.
+IND_BOUNDS <- utils::read.table(header = TRUE, text = "
+  num                  den     lo     hi  # observed
+  P3LNLS               LNLSGR  0.01   10  # 0.6-2.8
+  NCLNLS               LNLSGR  0.01   10  # 0.6-5.5
+  LNATRES              LNLSGR  0.01   10  # 0.9-3.7
+  NALNLS               NCLNLS  0     100  # 53-87
+  RSLNLS               ASSET   0       5  # 0.02-0.67
+  NTLNLSQ              LNLSGR -1       3  # 0.05-0.75
+  ELNATQ               ASSET  -1       3  # -0.06-0.55
+  NETINCQ              ASSET  -2       2  # -0.27-0.35
+  NETINC               ASSET  -5       5  # year to date
+  EQ                   EQTOT  90   100.1  # 98-100
+  LNLSNET              DEP    20     150  # 56-95
+  COREDEP              DEP     0     100  # 67-87
+  BRO                  DEP     0      25  # 1.3-8.6
+  DEPUNINS             DEP     0      80  # 15-44
+  VOLIAB               ASSET   0      60  # 11-37
+  OTHBFHLB             OTHBOR  0     100  # 31-61
+  SCAF-SCAA+SCHF-SCHA  EQ    -60      30  # -32-6
+  LNAG                 ASSET   0      20  # 0.3-0.5
+  LNRECONS             ASSET   0      20  # 1.4-4.9
+  LNRENRES             ASSET   0      30  # 4.8-8.3
+", comment.char = "#")
+for (i in seq_len(nrow(IND_BOUNDS))) {
+  b <- IND_BOUNDS[i, ]
+  r <- 100 * eval(str2lang(b$num), ind) / ind[[b$den]]
+  out <- which(!(r >= b$lo & r <= b$hi))
+  check(all(c(all.vars(str2lang(b$num)), b$den) %in% names(ind)) && length(out) == 0,
+        paste0("industry ", b$num, " / ", b$den, " outside [", b$lo, ", ", b$hi,
+               "%] in ", paste(utils::head(ind$RISDATE[out], 5), collapse = ",")))
 }
 # Quarter-over-quarter bank count moves ~1%; a big drop means a partial pull
 n <- ind$n_banks

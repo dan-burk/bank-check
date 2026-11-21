@@ -76,7 +76,8 @@ What breaks or is silently wrong with 170+ quarters:
 
 **Output:** a new small mart, `field_coverage.parquet`, with one row per
 (quarter, field) for the `STATEMENT_FIELDS` (18 at first; 20 since P3LNLS and
-NCLNLS were added for the Delinquency chart's industry lines).
+NCLNLS were added for the Delinquency chart's industry lines; 39 since the
+numerators and denominators of every chart's "All banks" line were added).
 
 | Column | Meaning |
 |---|---|

@@ -156,13 +156,24 @@ statement_table <- function(banks, section, unit = "usd", cmp = "qoq",
 
 # ---- Industry: every FDIC-insured bank combined ---------------------------
 
-# The lines the statements use, plus the delinquency dollars behind the
-# industry lines on the Delinquency chart (P3LNLS, NCLNLS). The pipeline
-# sums these per quarter into the industry_quarterly mart (pipeline/build.R).
+# The lines the statements use, plus the dollars behind the "All banks"
+# industry lines on the metric charts: each chart's numerator and
+# denominator (fields_meta.csv ind_num / ind_den), summed. All are in
+# APP_FIELDS, so every raw quarter carries them. The pipeline sums these
+# per quarter into the industry_quarterly mart (pipeline/build.R).
 STATEMENT_FIELDS <- paste0(
   "CERT,RISDATE,ASSET,LIAB,EQTOT,DEP,LNLSGR,LNATRES,SC,CHBAL,",
   "OTHBOR,FREPP,SUBND,NIMQ,NONIIQ,NONIXQ,ELNATQ,IGLSECQ,ITAXQ,NETINCQ,",
-  "P3LNLS,NCLNLS"
+  "P3LNLS,NCLNLS,",
+  # Asset quality and earnings: YTD flows for the YTD ratios, NTLNLSQ for
+  # the quarterly charge-off bars
+  "NALNLS,RSLNLS,NTLNLSQ,NTLNLS,NETINC,LNLSNET,EQ,",
+  # Funding
+  "COREDEP,BRO,DEPUNINS,VOLIAB,OTHBFHLB,",
+  # Securities at amortized cost and fair value (unrealized loss / equity)
+  "SCAA,SCAF,SCHA,SCHF,",
+  # Concentration numerators
+  "LNAG,LNRECONS,LNRENRES"
 )
 
 # A field counts for the industry only if the banks reporting it (a
