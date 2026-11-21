@@ -56,8 +56,10 @@ committed to git.
 5. **Checks.** `build.R` checks the marts (bank counts, no duplicates,
    assets = liabilities + equity for the industry, no quarter losing more
    than 10% of banks, no missing quarters, every field covered in the last
-   10 quarters, sums matching FDIC's own aggregate API, Q1 net income =
-   year to date). The workflow then runs the app's smoke and integrity
+   10 quarters, every summed field matching FDIC's own aggregate API, Q1
+   net income and charge-offs = year to date, net loans + allowance =
+   gross loans, and each charted industry ratio inside wide bounds that
+   catch unit or sum errors). The workflow then runs the app's smoke and integrity
    tests against them. Any failure stops the run: nothing is uploaded and
    the last good data stays live.
 6. **Publish.** Upload the quarters pulled this run, `manifest.csv` and
@@ -70,7 +72,7 @@ committed to git.
 
 | Mart | One row per | Used for |
 |---|---|---|
-| `industry_quarterly` | quarter, every statement line summed (NA where `field_coverage` is below `COVERAGE_MIN`) | Industry tab: table and charts |
+| `industry_quarterly` | quarter, every `STATEMENT_FIELDS` field summed (NA where `field_coverage` is below `COVERAGE_MIN`): the statement lines plus the numerators and denominators of the "All banks" chart lines | Industry tab: table and charts; industry lines on the metric charts |
 | `field_coverage` | quarter × statement field: banks reporting it and their share of assets | Audit of gaps; the checks in `build.R` |
 | `latest_snapshot` | bank in the newest quarter, plus active banks that have not filed yet | Peer bands (banks that filed) and the bank picker (`active` banks) |
 
