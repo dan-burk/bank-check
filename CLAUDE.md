@@ -44,16 +44,14 @@ in `app/data-cache/`.
 
 ## Run and test
 
-R is installed on the Windows side only. From WSL use `Rscript.exe`
-(R-4.4.3; see `.claude/skills/verify/SKILL.md` for the full path, the
-`host = '0.0.0.0'` requirement and Playwright driving). CI uses R 4.5.1.
+R runs natively on Linux here: use `Rscript`. CI uses R 4.5.1.
 
 ```sh
 gh release download data-marts --dir app/data --clobber   # marts first
-Rscript.exe -e "shiny::runApp('app', port = 7788)"
-Rscript.exe app/tests/smoke.R                             # deploy gate, offline
-INTEGRITY_SKIP_LIVE=1 Rscript.exe app/tests/integrity.R
-Rscript.exe pipeline/build.R [N_QUARTERS]                 # default 10; output in pipeline/out/
+Rscript -e "shiny::runApp('app', port = 7788)"
+Rscript app/tests/smoke.R                                 # deploy gate, offline
+INTEGRITY_SKIP_LIVE=1 Rscript app/tests/integrity.R
+Rscript pipeline/build.R [N_QUARTERS]                     # default 10; output in pipeline/out/
 ```
 
 ## Data conventions (do not break)
