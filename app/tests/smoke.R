@@ -146,6 +146,27 @@ bt <- Filter(function(t) identical(t$name, "+ Bonds"),
 by <- unlist(bt$y)
 stopifnot(sum(!is.na(by)) == sum(!is.na(ind$SC)) - 1, !any(by == 0, na.rm = TRUE))
 cat("ok: missing coverage is NA (\"–\" in tables, gaps in charts), never 0\n")
+# CECL markers: exactly the wanted dotted lines, each with its own short
+# label on its own row (labels never overlap). x = the line position to
+# expect (dates, or category positions on a category axis).
+CECL_LABELS <- c("2020-01-01" = "CECL (Large Banks)",
+                 "2023-01-01" = "CECL (Smaller Banks)")
+cecl_check <- function(p, want, x = as.Date(want)) {
+  lay <- plotly::plotly_build(p)$x$layout
+  sh <- lay$shapes; an <- lay$annotations
+  stopifnot(length(sh) == length(want), length(an) == length(want))
+  for (i in seq_along(want)) {
+    x0 <- sh[[i]]$x0
+    if (inherits(x, "Date")) x0 <- as.Date(x0)
+    stopifnot(identical(x0, x[i]), identical(sh[[i]]$x1, sh[[i]]$x0),
+              sh[[i]]$line$dash == "dot",
+              identical(an[[i]]$text, CECL_LABELS[[want[i]]]),
+              identical(an[[i]]$x, sh[[i]]$x0))
+  }
+  stopifnot(!anyDuplicated(vapply(an, function(a) a$yshift, 0)))
+}
+# The lines are the explanation: no CECL footnotes left in the UI
+stopifnot(!any(grepl("CECL", readLines("app.R"))))
 # Only the totals are drawn, listed first; every legend name has its
 # operator; subtracted lines are drawn positive, swing lines keep their sign
 for (u in c("usd", "pct")) {
@@ -154,13 +175,9 @@ for (u in c("usd", "pct")) {
   stopifnot(identical(vapply(tr[shown], `[[`, "", "name"),
                       c("+ Revenue", "− Expenses", "− Loan loss provision", "= Net income")),
             all(vapply(tr[!shown], `[[`, "", "visible") == "legendonly"))
-  # CECL marker on both history charts (provision and allowance both moved)
+  # Both CECL markers on both history charts (provision and allowance both moved)
   for (sec in c("is", "bs")) {
-    lay <- plotly::plotly_build(industry_history(ind_long, sec, u))$x$layout
-    stopifnot(length(lay$shapes) == 1,
-              identical(as.Date(lay$shapes[[1]]$x0), as.Date("2023-01-01")),
-              lay$shapes[[1]]$line$dash == "dot",
-              identical(lay$annotations[[1]]$text, "CECL"))
+    cecl_check(industry_history(ind_long, sec, u), c("2020-01-01", "2023-01-01"))
   }
   bs <- plotly::plotly_build(industry_history(ind_long, "bs", u))$x$data
   stopifnot(identical(vapply(Filter(function(t) isTRUE(t$visible), bs), `[[`, "", "name"),
@@ -360,6 +377,20 @@ ca <- pp$x$layout$xaxis$categoryarray
 stopifnot(all(unlist(pp$x$data[[3]]$x) %in% ca), all(dac$qlab[dac$RISDATE >= 20220101] %in% ca),
           identical(ca[1], "Q1'22"))
 cat("ok: risk_cushion, prov_nco_bars, funding_share All banks lines\n")
+# CECL markers: Risk vs Cushion (from 2019) has both; Provision vs
+# Charge-offs (from 2022) only the 2023 line, between Q4'22 and Q1'23
+for (m in c("pct", "usd")) {
+  cecl_check(risk_cushion(dac, mode = m), c("2020-01-01", "2023-01-01"))
+  cecl_check(prov_nco_bars(dac, mode = m), "2023-01-01", x = 3.5)
+}
+cecl_check(risk_cushion(dac, df2 = fbt), c("2020-01-01", "2023-01-01"))
+cecl_check(risk_cushion(NULL, ind = ind_full), c("2020-01-01", "2023-01-01"))
+cecl_check(prov_nco_bars(NULL, mode = "pct", ind = ind_full), "2023-01-01", x = 3.5)
+# Per-line skip: data starting after 2020 drops only the 2020 line
+cecl_check(risk_cushion(dac, from_date = as.Date("2021-01-01")), "2023-01-01")
+stopifnot(length(plotly::plotly_build(
+  risk_cushion(dac, from_date = as.Date("2023-06-30")))$x$layout$shapes) == 0)
+cat("ok: CECL markers (2020 large banks, 2023 smaller banks), footnotes gone\n")
 # Loan Mix: industry bands (dashed edges beside a bank, filled alone), % only;
 # each band = summed field / summed gross loans
 lm_all <- function(...) Filter(function(t) grepl("- All banks$", t$name),

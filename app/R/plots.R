@@ -403,26 +403,44 @@ risk_cushion <- function(df, mode = "pct", df2 = NULL,
     ), from_date, alone = is.null(df))
   }
   p <- plotly::layout(p, barmode = "group")
-  cecl_marker(base_layout(p, y_title), from_date)
+  # from_date first so c() keeps the Date class
+  to_date <- max(do.call(c, c(list(from_date), lapply(dds, `[[`, "date"),
+    if (!is.null(ind)) list(as.Date(as.character(ind$RISDATE), "%Y%m%d")))))
+  cecl_marker(base_layout(p, y_title), from_date, to_date)
 }
 
-# CECL adoption marker: the allowance definition changed here (2023 for
-# most banks; the footnote star carries the 2020 large-bank nuance).
-# Drawn only when the chart's data starts before it.
-cecl_marker <- function(p, from_date) {
-  cecl <- as.Date("2023-01-01")
-  if (from_date >= cecl) return(p)
-  plotly::layout(
-    p,
-    shapes = list(list(type = "line", x0 = cecl, x1 = cecl,
-                       yref = "paper", y0 = 0, y1 = 0.94,
-                       line = list(color = COL_GRAY, dash = "dot",
-                                   width = 1.2))),
-    annotations = list(list(x = cecl, y = 1, yref = "paper", text = "CECL",
-                            showarrow = FALSE, yanchor = "top",
-                            xanchor = "left", xshift = 4,
-                            font = list(color = COL_GRAY, size = 11)))
-  )
+# CECL adoption markers: the allowance definition changed for large banks
+# in 2020 and for smaller banks in 2023. The labelled line is the whole
+# explanation. Each line is drawn only when the chart's data starts before
+# it. Labels sit on two rows (never collide), right of their line unless
+# under a quarter of the chart lies there (then left, so they never clip at
+# the plot edge). Lines stop below both rows, so no label crosses a line.
+CECL_DATES <- c("CECL (Large Banks)"   = "2020-01-01",
+                "CECL (Smaller Banks)" = "2023-01-01")
+# cats: the sorted quarter-end dates of a category x axis (prov_nco_bars);
+# the line then sits between the last quarter before and the first after.
+cecl_marker <- function(p, from_date, to_date, cats = NULL) {
+  shapes <- list(); ann <- list()
+  for (i in seq_along(CECL_DATES)) {
+    d <- as.Date(CECL_DATES[[i]])
+    if (from_date >= d) next
+    if (is.null(cats)) {
+      x <- d; left <- as.numeric(d - from_date); right <- as.numeric(to_date - d)
+    } else {
+      x <- sum(cats < d) - 0.5; left <- x; right <- length(cats) - x
+    }
+    shapes[[length(shapes) + 1]] <- list(
+      type = "line", x0 = x, x1 = x, yref = "paper", y0 = 0, y1 = 0.84,
+      line = list(color = COL_GRAY, dash = "dot", width = 1.2))
+    side <- if (right >= 0.25 * (left + right)) "left" else "right"
+    ann[[length(ann) + 1]] <- list(
+      x = x, y = 1, yref = "paper", text = names(CECL_DATES)[i],
+      showarrow = FALSE, yanchor = "top", xanchor = side,
+      xshift = if (side == "left") 4 else -4, yshift = -16 * length(ann),
+      font = list(color = COL_GRAY, size = 11))
+  }
+  if (length(shapes) == 0) return(p)
+  plotly::layout(p, shapes = shapes, annotations = ann)
 }
 
 # Roll-rate proxies were cut in iteration 5: net flows from quarterly bucket
@@ -544,10 +562,14 @@ prov_nco_bars <- function(df, mode = "usd", from = 20220101, ind = NULL) {
       dates <- c(dates, idates[idates >= from_date])
     }
   }
+  cats <- sort(unique(dates))
   p <- plotly::layout(p, barmode = "group",
                       xaxis = list(categoryorder = "array",
-                                   categoryarray = qlab(sort(unique(dates)))))
-  base_layout(p, y_title, "Quarter")
+                                   categoryarray = qlab(cats)))
+  # Provisions are what jumped with CECL
+  p <- base_layout(p, y_title, "Quarter")
+  if (length(cats) == 0) return(p)
+  cecl_marker(p, min(cats), max(cats), cats = cats)
 }
 
 # Failure trajectories aligned on quarters before failure. sel_panel holds
@@ -725,7 +747,7 @@ industry_history <- function(long, section, unit = "usd") {
       hovertemplate = paste0(nm, ": ", fmt, "<extra></extra>"))
   }
   # Provision (income statement) and allowance (balance sheet) both moved
-  # with the CECL change, so both charts carry the marker
-  base_layout(p, y_title) |> cecl_marker(min(long$date)) |> range_buttons() |>
+  # with the CECL change, so both charts carry the markers
+  base_layout(p, y_title) |> cecl_marker(min(long$date), max(long$date)) |> range_buttons() |>
     plotly::layout(legend = list(groupclick = "toggleitem"))
 }
