@@ -1,0 +1,212 @@
+Quarters scored: 19970630..20260930 (118), 807268 bank-quarters, 12647 banks.
+Dropped for a missing input (mostly pre-2012 OTS thrift filers with no loan buckets or HTM fair values; since 2012 no domestic deposits): 63675 bank-quarters, 252 of them pre-failure.
+Dropped because the report went public after the bank failed: 265.
+Failure events 1997-2026 in the FDIC list: 606 (ASSISTANCE 13, FAILURE 593). Failed banks with at least one scored pre-failure report: 541.
+Run time (02_backtest.R): estimator 12.1s, era metrics 27.3s, total 42.2s.
+
+ERAS (by the year the report became public). Each cell: AUC (90% bootstrap range) caught-in-worst-5%/failed banks.
+A bank whose 4 pre-failure reports straddle an era boundary counts in both eras.
+       era failed_banks random_5pct_list                    eq_ta           tier1_leverage                   adj_eq               adj_eq_sym
+ 1997-2007           54              8.1   0.76 (0.69-0.82) 23/54   0.77 (0.70-0.82) 27/54   0.76 (0.69-0.82) 27/54   0.67 (0.60-0.75) 22/54
+ 2008-2012          442             76.9 0.92 (0.91-0.93) 404/442 0.93 (0.92-0.94) 412/442 0.92 (0.91-0.93) 406/442 0.93 (0.91-0.94) 406/442
+ 2013-2021           68             10.4   0.96 (0.94-0.99) 64/68   0.97 (0.94-0.99) 65/68   0.96 (0.94-0.98) 64/68   0.95 (0.91-0.98) 64/68
+ 2022-2026           13              2.4    0.80 (0.70-0.89) 6/13    0.84 (0.76-0.91) 6/13    0.85 (0.76-0.92) 9/13    0.82 (0.73-0.91) 9/13
+
+Paired AUC differences (same resampled failed banks):
+       era                  comparison auc_diff diff_lo90 diff_hi90 share_boot_above_0
+ 1997-2007          adj_eq minus eq_ta    0.003    -0.002     0.009              0.785
+ 1997-2007 adj_eq minus tier1_leverage   -0.007    -0.034     0.019              0.341
+ 1997-2007      adj_eq_sym minus eq_ta   -0.085    -0.138    -0.032              0.000
+ 1997-2007     adj_eq_sym minus adj_eq   -0.088    -0.141    -0.037              0.000
+ 1997-2007  tier1_leverage minus eq_ta    0.010    -0.016     0.037              0.709
+ 2008-2012          adj_eq minus eq_ta    0.003     0.002     0.004              1.000
+ 2008-2012 adj_eq minus tier1_leverage   -0.008    -0.014    -0.002              0.012
+ 2008-2012      adj_eq_sym minus eq_ta    0.009     0.003     0.015              0.991
+ 2008-2012     adj_eq_sym minus adj_eq    0.006     0.000     0.011              0.957
+ 2008-2012  tier1_leverage minus eq_ta    0.011     0.005     0.017              1.000
+ 2013-2021          adj_eq minus eq_ta   -0.001    -0.001     0.000              0.009
+ 2013-2021 adj_eq minus tier1_leverage   -0.007    -0.013    -0.002              0.006
+ 2013-2021      adj_eq_sym minus eq_ta   -0.018    -0.032    -0.006              0.003
+ 2013-2021     adj_eq_sym minus adj_eq   -0.017    -0.031    -0.006              0.004
+ 2013-2021  tier1_leverage minus eq_ta    0.006     0.001     0.011              0.986
+ 2022-2026          adj_eq minus eq_ta    0.048    -0.038     0.139              0.817
+ 2022-2026 adj_eq minus tier1_leverage    0.007    -0.034     0.056              0.582
+ 2022-2026      adj_eq_sym minus eq_ta    0.026    -0.074     0.131              0.669
+ 2022-2026     adj_eq_sym minus adj_eq   -0.022    -0.049     0.001              0.069
+ 2022-2026  tier1_leverage minus eq_ta    0.041    -0.017     0.096              0.882
+
+AUC restricted to complete 1-year windows:
+       era          score   auc auc_complete_windows
+ 1997-2007          eq_ta 0.755                0.755
+ 1997-2007 tier1_leverage 0.765                0.765
+ 1997-2007         adj_eq 0.758                0.758
+ 1997-2007     adj_eq_sym 0.671                0.671
+ 2008-2012          eq_ta 0.917                0.917
+ 2008-2012 tier1_leverage 0.928                0.928
+ 2008-2012         adj_eq 0.920                0.920
+ 2008-2012     adj_eq_sym 0.926                0.926
+ 2013-2021          eq_ta 0.965                0.965
+ 2013-2021 tier1_leverage 0.971                0.971
+ 2013-2021         adj_eq 0.964                0.964
+ 2013-2021     adj_eq_sym 0.947                0.947
+ 2022-2026          eq_ta 0.799                0.778
+ 2022-2026 tier1_leverage 0.839                0.822
+ 2022-2026         adj_eq 0.846                0.832
+ 2022-2026     adj_eq_sym 0.825                0.814
+
+FALLING RATES: rate gap = 30y mortgage rate - bank's own loan yield. Floored = max(0, gap); symmetric keeps negatives (hidden gains).
+pct_equity = industry loan loss (negative = gain) / industry equity.
+    period quarters mortgage_rate share_bankqtrs_gap_negative avg_symmetric_pct_equity most_negative_pct_equity most_negative_bn avg_floored_pct_equity
+ 1997-2007       43  7.7% -> 6.1%                       0.924                   -0.084                   -0.213             -157                  0.018
+ 2008-2012       20  6.0% -> 3.3%                       0.958                   -0.063                   -0.153             -250                  0.019
+ 2013-2018       24  3.6% -> 4.6%                       0.941                   -0.039                   -0.111             -183                  0.020
+ 2019-2021       12  4.3% -> 3.1%                       0.989                   -0.131                   -0.169             -378                  0.002
+ 2022-2026       19  4.2% -> 6.9%                       0.350                    0.069                   -0.040              -99                  0.104
+
+Share of banks whose loan buckets cover < 50% of loans (data-quality check), by year-end:
+  RISDATE mtg_rate median_loan_yield share_banks_gap_negative loan_loss_symmetric_pct_equity share_banks_bucket_cov_lt50
+ 19971231    0.071             0.094                    0.990                         -0.186                       0.111
+ 19981231    0.067             0.091                    0.990                         -0.201                       0.109
+ 19991231    0.079             0.089                    0.871                         -0.089                       0.107
+ 20001231    0.074             0.093                    0.981                         -0.184                       0.106
+ 20011231    0.071             0.082                    0.936                         -0.036                       0.104
+ 20021231    0.060             0.074                    0.956                         -0.057                       0.102
+ 20031231    0.059             0.067                    0.859                          0.007                       0.099
+ 20041231    0.058             0.066                    0.894                         -0.016                       0.096
+ 20051231    0.063             0.072                    0.885                         -0.025                       0.096
+ 20061231    0.061             0.079                    0.959                         -0.111                       0.095
+ 20071231    0.061             0.078                    0.968                         -0.116                       0.095
+ 20081231    0.053             0.066                    0.967                         -0.075                       0.095
+ 20091231    0.049             0.062                    0.965                         -0.040                       0.093
+ 20101231    0.047             0.061                    0.973                         -0.052                       0.093
+ 20111231    0.040             0.059                    0.992                         -0.109                       0.085
+ 20121231    0.033             0.057                    0.993                         -0.153                       0.000
+ 20131231    0.045             0.054                    0.910                         -0.009                       0.000
+ 20141231    0.039             0.052                    0.976                         -0.060                       0.000
+ 20151231    0.040             0.051                    0.960                         -0.031                       0.000
+ 20161231    0.042             0.050                    0.902                         -0.008                       0.000
+ 20171231    0.040             0.051                    0.968                         -0.062                       0.000
+ 20181231    0.046             0.054                    0.880                         -0.036                       0.000
+ 20191231    0.037             0.054                    0.992                         -0.128                       0.000
+ 20201231    0.027             0.050                    0.994                         -0.169                       0.000
+ 20211231    0.031             0.049                    0.988                         -0.111                       0.000
+ 20221231    0.064             0.052                    0.097                          0.135                       0.000
+ 20231231    0.068             0.060                    0.212                          0.061                       0.000
+ 20241231    0.067             0.064                    0.371                          0.039                       0.000
+ 20251231    0.062             0.066                    0.701                         -0.011                       0.000
+
+================ 2022-2026 detail (same as the first backtest) ================
+Failures: 13. Positives: 52 bank-quarters from 13 banks.
+  CERT                                    NAME  fail_date RESTYPE    group                                                  cause
+ 24735                     SILICON VALLEY BANK 2023-03-10 FAILURE rate+run                  Uninsured run after securities losses
+ 57053                          SIGNATURE BANK 2023-03-12 FAILURE rate+run            Contagion run; poor management, fast growth
+ 59017                     FIRST REPUBLIC BANK 2023-05-01 FAILURE rate+run Uninsured run; low-rate mortgage and securities losses
+ 25851                HEARTLAND TRI-STATE BANK 2023-07-28 FAILURE    fraud                     CEO wired funds into a crypto scam
+  8758                           CITIZENS BANK 2023-11-03 FAILURE   credit                        Bad commercial (trucking) loans
+ 27332                           REPUBLIC BANK 2024-04-26 FAILURE rate+run     Underwater HTM securities; failed recapitalization
+  4134                     FIRST NB OF LINDSAY 2024-10-18 FAILURE    fraud                     Falsified records, fraud by ex-CEO
+ 28611                    PULASKI SAVINGS BANK 2025-01-17 FAILURE    fraud          Missing deposit liabilities (suspected fraud)
+  5520                SANTA ANNA NATIONAL BANK 2025-06-27 FAILURE    fraud     Hidden loan losses, misreporting (suspected fraud)
+ 57488                METROPOLITAN CAPITAL B&T 2026-01-30 FAILURE   credit                         Impaired capital, problem loan
+ 25796 COMMUNITY BANK AND TRUST - WEST GEORGIA 2026-05-01 FAILURE   credit                  Problem SBA loans under consent order
+ 28722                          KENTLAND FS&LA 2026-07-10 FAILURE   credit  Unsafe practices, losses; critically undercapitalized
+ 25744                     SMALL BUSINESS BANK 2026-07-17 FAILURE   credit  Ongoing operating losses; critically undercapitalized
+
+Metrics (AUC: 0.5 = coin flip, 1 = perfect; 90% interval resamples the failed banks):
+              score   auc auc_lo90 auc_hi90 auc_complete_windows auc_rate_run_only auc_other_failures share_boot_beats_eq_ta share_boot_beats_tier1
+              eq_ta 0.799    0.700    0.886                0.778             0.795              0.800                  0.000                  0.120
+     tier1_leverage 0.839    0.756    0.915                0.822             0.914              0.806                  0.880                  0.000
+             adj_eq 0.846    0.757    0.924                0.832             0.937              0.806                  0.801                  0.565
+         adj_eq_cal 0.821    0.730    0.903                0.804             0.914              0.780                  0.621                  0.292
+   eq_ta_plus_unins 0.685    0.532    0.819                0.703             0.969              0.559                  0.046                  0.011
+     adj_plus_unins 0.695    0.565    0.812                0.714             0.994              0.562                  0.061                  0.005
+ adj_cal_plus_unins 0.680    0.556    0.795                0.697             0.991              0.541                  0.042                  0.002
+
+Watch lists (of 13 failed banks; a random list would catch about 0.5 (1%) and 2.4 (5%)):
+              score top1pct_failures_caught top1pct_bankqtrs_flagged top1pct_false_bankqtrs top1pct_false_banks top5pct_failures_caught top5pct_bankqtrs_flagged top5pct_false_bankqtrs
+              eq_ta                       5                      896                    883                 157                       6                     4518                   4497
+     tier1_leverage                       5                      896                    878                 196                       6                     4518                   4498
+             adj_eq                       6                      896                    880                 159                       9                     4518                   4490
+         adj_eq_cal                       4                      896                    884                 157                       8                     4518                   4496
+   eq_ta_plus_unins                       3                      897                    891                 170                       4                     4518                   4504
+     adj_plus_unins                       4                      895                    882                 161                       5                     4520                   4503
+ adj_cal_plus_unins                       4                      895                    882                 163                       4                     4519                   4504
+ top5pct_false_banks
+                 616
+                 741
+                 626
+                 663
+                 681
+                 678
+                 700
+
+Binary run-risk flags:
+              flag failures_caught bankqtrs_flagged false_bankqtrs distinct_banks_flagged
+     run_risk_flag               3               59             51                     20
+ run_risk_flag_cal               3              183            174                     59
+
+Each failed bank: % of banks ranked at least as risky (1 = last report before failure):
+                   NAMEFULL    group  RISDATE qtrs_before p_eq_ta p_tier1_leverage p_adj_eq p_adj_eq_sym p_adj_eq_cal
+        SILICON VALLEY BANK rate+run 20221231           1   27.0%             5.9%     4.9%         4.9%        17.8%
+        SILICON VALLEY BANK rate+run 20220930           2   28.1%             6.7%     3.0%         3.0%        10.4%
+        SILICON VALLEY BANK rate+run 20220630           3   24.2%             4.8%     3.2%         3.2%         4.5%
+        SILICON VALLEY BANK rate+run 20220331           4    9.4%             2.5%     0.4%         0.3%         0.8%
+             SIGNATURE BANK rate+run 20221231           1   25.5%            17.7%    34.8%        34.7%        41.4%
+             SIGNATURE BANK rate+run 20220930           2   22.9%            13.9%    28.6%        28.5%        32.5%
+             SIGNATURE BANK rate+run 20220630           3   20.2%             8.4%    18.9%        18.7%        19.2%
+             SIGNATURE BANK rate+run 20220331           4    9.7%             7.0%     5.0%         3.2%         3.9%
+        FIRST REPUBLIC BANK rate+run 20221231           1   38.1%            12.7%     0.6%         0.6%         0.9%
+        FIRST REPUBLIC BANK rate+run 20220930           2   44.5%            16.0%     0.4%         0.4%         0.4%
+        FIRST REPUBLIC BANK rate+run 20220630           3   39.0%            19.0%     0.2%         0.2%         0.1%
+        FIRST REPUBLIC BANK rate+run 20220331           4   36.7%            23.8%     0.6%         0.4%         0.1%
+   HEARTLAND TRI-STATE BANK    fraud 20230331           1    9.6%            21.9%    40.8%        40.7%        56.7%
+   HEARTLAND TRI-STATE BANK    fraud 20221231           2   12.2%            40.3%    43.0%        42.9%        58.0%
+   HEARTLAND TRI-STATE BANK    fraud 20220930           3   11.3%            24.3%    42.2%        42.5%        56.6%
+   HEARTLAND TRI-STATE BANK    fraud 20220630           4   10.8%            32.2%    34.1%        38.6%        37.8%
+              CITIZENS BANK   credit 20230630           1    2.4%             7.9%    11.3%        11.3%        22.6%
+              CITIZENS BANK   credit 20230331           2    2.7%             7.2%    14.4%        14.4%        26.7%
+              CITIZENS BANK   credit 20221231           3    3.6%             6.9%    10.7%        10.6%        18.6%
+              CITIZENS BANK   credit 20220930           4    3.1%            10.2%    11.5%        11.4%        20.1%
+              REPUBLIC BANK rate+run 20231231           1    0.3%             0.0%     0.1%         0.1%         1.3%
+              REPUBLIC BANK rate+run 20230930           2    0.7%             0.0%     0.1%         0.1%         2.0%
+              REPUBLIC BANK rate+run 20230630           3    0.7%             0.0%     0.1%         0.1%         2.1%
+              REPUBLIC BANK rate+run 20230331           4    0.8%             0.1%     0.1%         0.1%         1.0%
+ THE FIRST NATIONAL BANK OF    fraud 20240630           1   44.3%            27.9%    47.1%        45.7%        45.5%
+ THE FIRST NATIONAL BANK OF    fraud 20240331           2   59.0%            57.2%    64.4%        62.3%        63.2%
+ THE FIRST NATIONAL BANK OF    fraud 20231231           3   63.4%            52.5%    59.0%        57.6%        53.2%
+ THE FIRST NATIONAL BANK OF    fraud 20230930           4   77.3%            72.4%    70.3%        69.5%        61.2%
+       PULASKI SAVINGS BANK    fraud 20240930           1   52.6%            43.4%    24.2%        20.5%        10.2%
+       PULASKI SAVINGS BANK    fraud 20240630           2   59.4%            41.4%     2.5%         2.5%         1.5%
+       PULASKI SAVINGS BANK    fraud 20240331           3   61.4%            48.6%     8.3%         8.3%         4.4%
+       PULASKI SAVINGS BANK    fraud 20231231           4   65.6%            50.5%    53.3%        52.2%        43.4%
+ THE SANTA ANNA NATIONAL BA    fraud 20250331           1    7.2%             9.5%    22.3%        37.3%        28.1%
+ THE SANTA ANNA NATIONAL BA    fraud 20241231           2    6.2%            15.3%    20.0%        34.3%        27.0%
+ THE SANTA ANNA NATIONAL BA    fraud 20240930           3   21.1%            48.1%    31.8%        55.5%        38.2%
+ THE SANTA ANNA NATIONAL BA    fraud 20240630           4   19.8%            49.8%    45.2%        62.2%        53.9%
+ METROPOLITAN CAPITAL BANK    credit 20250930           1    0.1%             0.1%     0.7%         1.8%         2.6%
+ METROPOLITAN CAPITAL BANK    credit 20250630           2    0.2%             0.1%     2.5%         4.0%         5.0%
+ METROPOLITAN CAPITAL BANK    credit 20250331           3    0.2%             0.1%     2.2%         3.9%         5.3%
+ METROPOLITAN CAPITAL BANK    credit 20241231           4    0.3%             0.0%     2.7%         5.9%         6.8%
+ COMMUNITY BANK AND TRUST -   credit 20251231           1    2.0%             0.6%     6.1%        36.8%         7.7%
+ COMMUNITY BANK AND TRUST -   credit 20250930           2    1.1%             0.2%     4.8%        12.3%         7.9%
+ COMMUNITY BANK AND TRUST -   credit 20250630           3    0.9%             0.1%     3.6%         3.6%         5.2%
+ COMMUNITY BANK AND TRUST -   credit 20250331           4    3.0%             1.0%    13.6%        19.7%        19.3%
+ KENTLAND FEDERAL SAVINGS A   credit 20260331           1    0.2%             0.0%     0.1%         0.1%         0.1%
+ KENTLAND FEDERAL SAVINGS A   credit 20251231           2    0.2%             0.1%     0.1%         0.1%         0.2%
+ KENTLAND FEDERAL SAVINGS A   credit 20250930           3    0.8%             0.1%     0.1%         0.1%         0.0%
+ KENTLAND FEDERAL SAVINGS A   credit 20250630           4   26.5%            11.5%     0.2%         0.2%         0.2%
+        SMALL BUSINESS BANK   credit 20260331           1    0.9%             0.2%     0.2%         0.2%         0.2%
+        SMALL BUSINESS BANK   credit 20251231           2    2.1%             0.2%     0.5%         0.5%         0.6%
+        SMALL BUSINESS BANK   credit 20250930           3   33.0%             0.9%     1.2%         1.1%         0.7%
+        SMALL BUSINESS BANK   credit 20250630           4   57.3%            15.3%     3.8%         3.8%         2.3%
+
+BTFP: 1806 distinct borrower RSSDs; 1316 matched exactly to a bank in the 2022Q4 panel (4683 banks); the rest are mostly credit unions.
+              score    auc borrowers_in_worst5pct worst5pct_size
+              eq_ta 0.6180                    104            234
+     tier1_leverage 0.5818                     67            234
+             adj_eq 0.6294                    102            234
+         adj_eq_sym 0.6300                    102            234
+         adj_eq_cal 0.6186                     97            234
+   eq_ta_plus_unins 0.6344                     97            234
+     adj_plus_unins 0.6484                    107            234
+ adj_cal_plus_unins 0.6434                    110            234

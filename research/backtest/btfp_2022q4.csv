@@ -1,0 +1,9 @@
+"score","auc","borrowers_in_worst5pct","worst5pct_size"
+"eq_ta",0.618,104,234
+"tier1_leverage",0.5818,67,234
+"adj_eq",0.6294,102,234
+"adj_eq_sym",0.63,102,234
+"adj_eq_cal",0.6186,97,234
+"eq_ta_plus_unins",0.6344,97,234
+"adj_plus_unins",0.6484,107,234
+"adj_cal_plus_unins",0.6434,110,234

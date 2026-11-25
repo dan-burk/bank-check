@@ -6,27 +6,12 @@
 # Re-running reuses the cache; delete cache/*.rds to force a fresh pull.
 
 source("app/R/api.R")   # fdic_query(), latest_risdate(), prev_quarter_end()
+source("research/unrealized-losses/estimator.R")   # UL_FIELDS
 
 OUT <- "research/unrealized-losses/cache"
 dir.create(OUT, showWarnings = FALSE, recursive = TRUE)
 
-FIELDS <- paste0(
-  "CERT,NAMEFULL,STALP,RISDATE,ASSET,EQTOT,RBCT1J,EQCCOMPI,",
-  "DEP,DEPDOM,DEPUNINS,",
-  # securities: amortized cost and fair value, AFS and HTM
-  "SCAA,SCAF,SCHA,SCHF,SC,ISCQ,",
-  # loans and loan interest income (quarterly)
-  "LNLSGR,LNRE,LNRERES,LNRENRES,LNREMULT,LNRECONS,LNREAG,LNAG,LNCI,LNCON,",
-  "ILNLSQ,ILNDOMQ,ILNFORQ,",
-  # RC-C memo 2.a: closed-end first-lien 1-4 family, remaining maturity / repricing
-  "LNRS3LES,LNRS3T12,LNRS1T3,LNRS3T5,LNRS5T15,LNRSOV15,",
-  # RC-C memo 2.b: all other loans and leases
-  "LNOT3LES,LNOT3T12,LNOT1T3,LNOT3T5,LNOT5T15,LNOTOV15,",
-  # RC-B memo 2: securities by remaining maturity / repricing (model check)
-  "SCNM3LES,SCNM3T12,SCNM1T3,SCNM3T5,SCNM5T15,SCNMOV15,",
-  "SCPT3LES,SCPT3T12,SCPT1T3,SCPT3T5,SCPT5T15,SCPTOV15,",
-  "SCO3YLES,SCOOV3Y"
-)
+FIELDS <- UL_FIELDS
 
 pull <- function(risdate) {
   f <- file.path(OUT, paste0("fdic_", risdate, ".rds"))
