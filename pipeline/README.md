@@ -133,8 +133,8 @@ gh release download data-marts --dir app/data --clobber
 To build the marts yourself:
 
 ```
-Rscript.exe pipeline/build.R        # last 10 quarters
-Rscript.exe pipeline/build.R 40     # last 40 quarters
+Rscript pipeline/build.R        # last 10 quarters
+Rscript pipeline/build.R 40     # last 40 quarters
 cp pipeline/out/marts/*.parquet app/data/
 ```
 
