@@ -4,7 +4,7 @@
 #
 # Self-contained on app/R/api.R (public FDIC API, no auth). Run from the
 # repo root, only to refresh:
-#   Rscript.exe app/build/build_fail_panel.R
+#   Rscript app/build/build_fail_panel.R
 #
 # Output (rds, not csv: smaller in the shinylive bundle and pre-parsed,
 # and no readr so the browser never downloads it):

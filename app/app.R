@@ -1,5 +1,5 @@
 # Bank risk explorer. Run from the repo root:
-#   Rscript.exe -e "shiny::runApp('app', port = 7788)"
+#   Rscript -e "shiny::runApp('app', port = 7788)"
 #
 # Layout follows the data dictionary's CAMELS categories, one top-level tab
 # each. Hard rule: at most two full charts visible per screen. Every card
