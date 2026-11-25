@@ -25,7 +25,12 @@ flowchart LR
 
 | Piece | File |
 |---|---|
-| Extract, change check, raw, marts, mart checks | `pipeline/build.R` |
+| Entry point: runs the steps below in order | `pipeline/build.R` |
+| Throttled transport (2 s gap, retries, request count) | `pipeline/R/http.R` |
+| Raw store: quarter files, change check, manifest, revisions log | `pipeline/R/store.R` |
+| Extract: FDIC quarters to pull, one quarter per request (paged) | `pipeline/sources/fdic.R` |
+| Marts: `industry_quarterly` + `field_coverage`, `latest_snapshot` | `pipeline/marts/industry.R`, `pipeline/marts/snapshot.R` |
+| Mart checks, one file per mart (plus the `check()` helper) | `pipeline/checks/industry.R`, `pipeline/checks/snapshot.R`, `pipeline/checks/check.R` |
 | Nightly run, upload, deploy trigger | `.github/workflows/pipeline.yml` |
 | Download marts before test and deploy | `.github/workflows/deploy.yml` |
 | App reads the marts | `app/R/data.R` (`load_snapshot`, `load_industry`) |
@@ -53,7 +58,7 @@ committed to git.
 3. **Raw.** Overwrite the quarter's parquet file with the new pull.
 4. **Transform.** Build the marts from all raw files on hand, plus one
    request for the FDIC directory of active banks.
-5. **Checks.** `build.R` checks the marts (bank counts, no duplicates,
+5. **Checks.** `pipeline/checks/` checks the marts (bank counts, no duplicates,
    assets = liabilities + equity for the industry, no quarter losing more
    than 10% of banks, no missing quarters, every field covered in the last
    10 quarters, every summed field matching FDIC's own aggregate API, Q1
@@ -73,7 +78,7 @@ committed to git.
 | Mart | One row per | Used for |
 |---|---|---|
 | `industry_quarterly` | quarter, every `STATEMENT_FIELDS` field summed (NA where `field_coverage` is below `COVERAGE_MIN`): the statement lines plus the numerators and denominators of the "All banks" chart lines | Industry tab: table and charts; industry lines on the metric charts |
-| `field_coverage` | quarter × statement field: banks reporting it and their share of assets | Audit of gaps; the checks in `build.R` |
+| `field_coverage` | quarter × statement field: banks reporting it and their share of assets | Audit of gaps; the checks in `pipeline/checks/` |
 | `latest_snapshot` | bank in the newest quarter, plus active banks that have not filed yet | Peer bands (banks that filed) and the bank picker (`active` banks) |
 
 `latest_snapshot` has an `active` flag because "banks in the latest
@@ -133,8 +138,8 @@ gh release download data-marts --dir app/data --clobber
 To build the marts yourself:
 
 ```
-Rscript.exe pipeline/build.R        # last 10 quarters
-Rscript.exe pipeline/build.R 40     # last 40 quarters
+Rscript pipeline/build.R        # last 10 quarters
+Rscript pipeline/build.R 40     # last 40 quarters
 cp pipeline/out/marts/*.parquet app/data/
 ```
 

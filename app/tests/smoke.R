@@ -1,6 +1,6 @@
 # Smoke test for the app: every plot builder returns a plotly object and
 # every server output renders. Run from the repo root:
-#   Rscript.exe app/tests/smoke.R
+#   Rscript app/tests/smoke.R
 # Needs the pipeline marts in app/data/ (see pipeline/README.md); runs
 # without network to FDIC.
 

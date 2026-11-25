@@ -4,7 +4,7 @@
 # from the raw FDIC columns with its own arithmetic, and cross-checks that
 # against (a) derive()'s columns and (b) the y-values inside the built
 # plotly traces. Run from the repo root:
-#   Rscript.exe app/tests/integrity.R
+#   Rscript app/tests/integrity.R
 #
 # Roster: 3 small + 2 medium + 3 large banks sampled from the latest_snapshot
 # cross-section (INTEGRITY_SEED env var, default 20260716, makes any run
