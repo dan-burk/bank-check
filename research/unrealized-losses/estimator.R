@@ -83,6 +83,11 @@ estimate <- function(risdate, prev_risdate, cache = UL_CACHE) {
   d$loss_loans_res <- bucket_loss(d, LN_RES, d$rate_gap)
   d$loss_loans_oth <- bucket_loss(d, LN_OTH, d$rate_gap)
   d$loss_loans <- d$loss_loans_res + d$loss_loans_oth
+  # Symmetric variant (research only): no floor, so a bank earning more than
+  # today's mortgage rate shows a hidden GAIN (negative loss).
+  d$rate_gap_raw <- mtg - d$loan_yield
+  d$loss_loans_sym <- bucket_loss(d, LN_RES, d$rate_gap_raw) +
+    bucket_loss(d, LN_OTH, d$rate_gap_raw)
 
   # Reported securities losses (positive = loss)
   d$loss_htm <- d$SCHA - d$SCHF
@@ -105,6 +110,7 @@ estimate <- function(risdate, prev_risdate, cache = UL_CACHE) {
   d$hidden_to_equity <- d$hidden_loss / d$EQTOT
   d$adj_equity <- d$EQTOT - d$hidden_loss             # AFS loss already in EQTOT
   d$adj_equity_to_assets <- d$adj_equity / d$ASSET
+  d$adj_equity_sym_to_assets <- (d$EQTOT - d$loss_htm - d$loss_loans_sym) / d$ASSET
   # Tier 1 view: most banks opted out of counting AFS losses in regulatory
   # capital, so for Tier 1 all three losses are "hidden". We do not know
   # each bank's opt-out status; this assumes everyone opted out.

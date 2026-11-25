@@ -63,3 +63,42 @@ g <- ggplot(long, aes(q, pct, colour = series, shape = series)) +
         legend.position = "top", legend.justification = "left",
         legend.text = element_text(size = 10.5))
 ggsave(file.path(DIR, "failed_bank_ranks.png"), g, width = 13, height = 8.5, dpi = 150)
+
+# ---- Chart 2: AUC by era, with the 90% bootstrap range (era_metrics.csv) ----
+em <- read.csv(file.path(DIR, "era_metrics.csv"))
+ES <- c(eq_ta = "Reported equity / assets", tier1_leverage = "Tier 1 leverage",
+        adj_eq = "Ours, floored (default)", adj_eq_sym = "Ours, symmetric (no floor)")
+em$score <- factor(ES[em$score], levels = rev(ES))
+em$facet <- factor(sprintf("%s\n%d failed banks", em$era, em$failed_banks),
+                   levels = unique(sprintf("%s\n%d failed banks", em$era, em$failed_banks)))
+em$lab <- sprintf("%.2f  ·  %d/%d", em$auc, em$caught_worst5pct, em$failed_banks)
+g2 <- ggplot(em, aes(auc, score, colour = score, shape = score)) +
+  geom_vline(xintercept = 0.5, colour = "#9a9994", linewidth = 0.3, linetype = "22") +
+  geom_errorbar(aes(xmin = auc_lo90, xmax = auc_hi90), width = 0, linewidth = 1.1,
+                orientation = "y") +
+  geom_point(size = 3.2, stroke = 1, fill = "#fcfcfb") +
+  geom_text(aes(x = 0.505, label = lab), hjust = 0, vjust = -0.9, size = 3.1,
+            colour = "#52514e", show.legend = FALSE) +
+  facet_wrap(~facet, nrow = 1) +
+  scale_x_continuous(limits = c(0.5, 1), breaks = c(0.5, 0.6, 0.7, 0.8, 0.9)) +
+  scale_colour_manual(values = setNames(c("#eb6834", "#1baf7a", "#2a78d6", "#eda100"), ES),
+                      breaks = ES, name = NULL) +
+  scale_shape_manual(values = setNames(c(21, 24, 16, 15), ES), breaks = ES, name = NULL) +
+  labs(title = "How well each measure ranked banks that failed within a year, by era",
+       subtitle = paste0("AUC: chance a pre-failure report ranks worse than a surviving bank's ",
+                         "(0.5 = coin flip, 1 = perfect). Bar = 90% bootstrap range over the failed banks.\n",
+                         "Label: AUC · failed banks caught on a worst-5% watch list. ",
+                         "Eras by the year each report became public."),
+       x = "AUC", y = NULL) +
+  theme_minimal(base_size = 11) +
+  theme(plot.background = element_rect(fill = "#fcfcfb", colour = NA),
+        panel.grid.minor = element_blank(), panel.grid.major.y = element_blank(),
+        panel.grid.major.x = element_line(colour = "#e6e5e1", linewidth = 0.3),
+        panel.spacing.x = unit(1.2, "lines"),
+        strip.text = element_text(face = "bold", hjust = 0, size = 10.5, colour = "#0b0b0b"),
+        plot.title = element_text(face = "bold", size = 15, colour = "#0b0b0b"),
+        plot.subtitle = element_text(colour = "#52514e", size = 10),
+        axis.text = element_text(colour = "#52514e"),
+        axis.text.y = element_text(colour = "#0b0b0b", size = 10.5),
+        legend.position = "none")
+ggsave(file.path(DIR, "auc_by_era.png"), g2, width = 13, height = 4.8, dpi = 150)
