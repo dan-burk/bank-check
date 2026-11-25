@@ -1,0 +1,18 @@
+Silicon Valley Bank, 2022Q4 call report, run = 40% of uninsured deposits
+($ billions)
+Total assets                  209.0
+Deposits / uninsured          175.4 /    151.6
+Tier 1 capital                 17.0   (8.13% of assets)
+Cash needed                    60.6
+Where the cash comes from:
+  cash above 2% floor           8.3   of     12.5 cash on hand
+  fed funds + repos             0.7
+  trading assets                0.1
+  AFS securities               26.0   of     26.0  (cost 28.5, so 8.9% loss realized)
+  HTM securities               25.5   of     76.2  fair value (book 91.3, 16.6% loss)
+  loans                         0.0
+Realized loss (hits Tier 1)      7.6
+Tier 1 after                    9.4
+Assets after                  143.3
+Ratio after                    6.56%  (2% = critically undercapitalized)
+Breaking point (uninsured run, FHLB off): 65.0%
