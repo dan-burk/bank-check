@@ -139,7 +139,7 @@ count_quarter <- function(risdate) {
 XS_MIN_COMPLETE <- 0.95
 
 # Failure window: how many quarters before failure the failures panel keeps
-# (build_fail_panel.R), the baseline median spans (fail_median) and the
+# (pipeline/marts/fail_panel.R), the baseline median spans (fail_median) and the
 # trajectory chart draws, plus the reference bank's own last N quarters.
 MAX_QTRS_BEFORE <- 20
 

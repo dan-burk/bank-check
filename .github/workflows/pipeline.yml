@@ -1,15 +1,16 @@
 # Nightly data pipeline (pipeline/README.md). Pulls the last 10 quarters
-# for every bank from the FDIC API and the FRED rate series, logs any
-# revisions against the stored raw files, rebuilds the marts, tests them,
-# and publishes:
-#   data-raw   release: one parquet per quarter + revisions.csv, fred.*
-#   data-marts release: the marts the app reads, plus rates_monthly
+# for every bank from the FDIC API, the FRED rate series and the FDIC
+# failures list, logs any revisions against the stored raw files, rebuilds
+# the marts, tests them, and publishes:
+#   data-raw   release: one parquet per quarter + revisions.csv, fred.*, failures.*
+#   data-marts release: the marts the app reads (fail_panel and
+#              failures_meta included), plus rates_monthly
 # If an app mart changed, it starts "Test and deploy" so both sites pick
 # them up. Most nights nothing changed and nothing deploys.
 #
 # An FDIC failure (API down, a core mart check or test trips) stops the
 # job before anything is uploaded, so the last good data stays live and
-# GitHub emails the repo owner. A non-critical source (FRED) failing holds
+# GitHub emails the repo owner. A non-critical source (FRED, failures) failing holds
 # back only its own files and marts: FDIC still publishes, and the job
 # still fails at the end so GitHub emails. Run it by hand from the Actions tab; set
 # "quarters" to 171 once for the 1984-to-now backfill
@@ -85,11 +86,13 @@ jobs:
             if grep -qx manifest.csv <<< "$assets"; then
               gh release download data-raw --dir pipeline/out/raw --pattern 'manifest.csv'
             fi
-            # Other sources' last good raw (fred.*): diffed against, and
-            # used as is if that source fails tonight
-            if grep -q '^fred\.' <<< "$assets"; then
-              gh release download data-raw --dir pipeline/out/raw --pattern 'fred.*'
-            fi
+            # Other sources' last good raw (fred.*, failures.*): diffed
+            # against, and used as is if that source fails tonight
+            for s in fred failures; do
+              if grep -q "^$s\." <<< "$assets"; then
+                gh release download data-raw --dir pipeline/out/raw --pattern "$s.*"
+              fi
+            done
           fi
           n=$(gh release view data-marts --json assets --jq '.assets | length')
           if [ "$n" -gt 0 ]; then
@@ -115,21 +118,24 @@ jobs:
             exit "$code"
           fi
 
-      # Same tests the deploy runs, against the new marts. The integrity
-      # test's live phase is skipped: the pipeline makes no extra API calls.
+      # Same tests the deploy runs, against the new marts. A mart skipped or
+      # held back tonight is tested as its published copy, which is what
+      # the deploy would ship. The integrity test's live phase is skipped:
+      # the pipeline makes no extra API calls.
       - name: Test the new marts
         env:
           INTEGRITY_SKIP_LIVE: "1"
         run: |
+          cp prev-marts/*.parquet app/data/ 2>/dev/null || true
           cp pipeline/out/marts/*.parquet app/data/
           Rscript app/tests/smoke.R
           Rscript app/tests/integrity.R
 
       - name: Upload raw data
         run: |
-          # fred.* is rewritten only after a good pull, so a failed source
-          # uploads nothing and its last good files stay
-          mapfile -t files < <(find pipeline/out/raw \( -name 'risdate.*.parquet' -o -name 'fred.*' \) -newer pipeline/out/.run-start)
+          # fred.* and failures.* are rewritten only after a good pull, so a
+          # failed source uploads nothing and its last good files stay
+          mapfile -t files < <(find pipeline/out/raw \( -name 'risdate.*.parquet' -o -name 'fred.*' -o -name 'failures.*' \) -newer pipeline/out/.run-start)
           files+=(pipeline/out/raw/manifest.csv)
           [ -f pipeline/out/revisions.csv ] && files+=(pipeline/out/revisions.csv)
           gh release upload data-raw "${files[@]}" --clobber

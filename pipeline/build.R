@@ -1,6 +1,6 @@
 # Data pipeline: pull the last N quarters for every bank, store one parquet
 # file per quarter, log any FDIC revisions against the copy already on disk,
-# pull the other sources (FRED), build the marts and check them. An FDIC or
+# pull the other sources (FRED, failures), build the marts and check them. An FDIC or
 # core-mart failure stops the run with an error and writes no marts. A
 # non-critical source or mart failure holds back only its own marts and
 # ends the run with status 2. Design: see pipeline/README.md.
@@ -25,6 +25,9 @@
 #   marts/field_coverage.parquet      per quarter and statement field: banks
 #                                     reporting it and their share of assets
 #   raw/fred.*.csv, marts/rates_monthly.parquet   FRED rates (sources/fred.R)
+#   raw/failures.*, marts/fail_panel.parquet, marts/failures_meta.parquet
+#                                     failures list and the app's failures
+#                                     tab (sources/failures.R, marts/fail_panel.R)
 #
 # The work is in pipeline/R/ (transport, raw store, source registry), pipeline/sources/
 # (pulls), pipeline/marts/ (builders) and pipeline/checks/.
@@ -46,10 +49,11 @@ for (d in c(RAW, MARTS)) dir.create(d, recursive = TRUE, showWarnings = FALSE)
 source(file.path("app", "R", "api.R"))
 source(file.path("app", "R", "statements.R"))
 for (f in c("R/http.R", "R/store.R", "sources/fdic.R", "sources/fred.R",
-            "R/sources.R",
+            "sources/failures.R", "R/sources.R",
             "marts/industry.R", "marts/snapshot.R", "marts/rates.R",
+            "marts/fail_panel.R",
             "checks/check.R", "checks/snapshot.R", "checks/industry.R",
-            "checks/rates.R")) {
+            "checks/rates.R", "checks/fail_panel.R")) {
   source(file.path("pipeline", f))
 }
 
@@ -100,7 +104,18 @@ marts_ok <- c(
     write_parquet(rates, path)
     cat(sprintf("Mart rates_monthly: %d rows, %d series.\n", nrow(rates),
                 length(unique(rates$series))))
-  })
+  }),
+  fail_panel = build_optional_mart("fail_panel", c("fdic", "failures"), src, also = "failures_meta",
+    function(path) {
+      fails <- panel_failures(failures_read())
+      fp <- build_fail_panel(fails, read_fail_history(files, fails$CERT))
+      check_fail_panel(fp, fails, raw_rds(files), newest)
+      # gzip: 3.0 MB, the size of the old rds (zstd is 4.4 MB on this table)
+      write_parquet(fp$panel, path[["fail_panel"]], compression = "gzip")
+      write_parquet(fp$meta,  path[["failures_meta"]])
+      cat(sprintf("Mart fail_panel: %d rows; failures_meta: %d failures, %d with filings.\n",
+                  nrow(fp$panel), nrow(fp$meta), sum(fp$meta$n_filings > 0)))
+    })
 )
 
 cat(sprintf("Done: %d requests, %.0f s. Raw %.1f MB across %d quarters.\n",

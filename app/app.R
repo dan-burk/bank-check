@@ -35,7 +35,7 @@ IND_LONG <- industry_long(INDUSTRY)   # both Industry charts filter this
 # one up, so the default errors in the browser build
 IND_CACHE <- cachem::cache_mem()
 
-# All post-2000 failures (built by app/build/build_fail_panel.R)
+# All post-2000 failures (the fail_panel and failures_meta marts)
 FAIL_PANEL <- load_fail_panel()
 FAIL_META  <- load_fail_meta()
 TRAJ_REGIONS <- c("Midwest", "Northeast", "South", "West")

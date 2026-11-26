@@ -187,7 +187,7 @@ or research.
 | Mart | One row per | Built from | Rebuilt | Use |
 |---|---|---|---|---|
 | `rates_monthly` | month × series: average, last value, number of observations | FRED | nightly | input to hidden_loss and hmda_book; **app** context line ("30y mortgage rate 6.9%") |
-| `failures` | failure event (CERT, FAILDATE, RESTYPE, RESTYPE1, QBFASSET, ...) | failures raw | nightly | `fail_panel`, backtest labels |
+| `failures` | failure event (CERT, FAILDATE, RESTYPE, RESTYPE1, QBFASSET, ...) | failures raw | nightly | `fail_panel`, backtest labels. PR 3: not a separate mart. The checked raw `failures.parquet` is this table (a typed copy would only duplicate it) |
 | `fail_panel`, `failures_meta` | (CERT, quarter) for the 0-20 quarters before failure | FDIC raw + `failures` | nightly, published only if changed | **app** failures tab. Replaces `build_fail_panel.R` and `refresh.yml`, with **no per-bank requests**, because the raw files already hold every bank since 1984 |
 | `bank_ids` | CERT: RSSD, LEI(s), (later) ticker, with the source of each link | FDIC institutions + HMDA panel | nightly | the one ID crosswalk every source joins through |
 | `hidden_loss` | (CERT, quarter), last 20 quarters | FDIC raw + `rates_monthly` | nightly | **app**: "hidden loss", "equity after hidden losses / assets" and its percentile. Columns: `loss_htm`, `loss_afs`, `loss_loans_res`, `loss_loans_oth`, `hidden_loss`, `adj_equity_to_assets`, `pct_worst`, `loan_yield`, `loan_yield_imputed`, `rate_gap`, `mtg_rate`, `bucket_cov`, `method_version` |
@@ -287,7 +287,8 @@ anyone can re-run from the published releases.
 | FDIC request or FDIC check | Run stops, nothing is published (as today) |
 | FRED, failures or HMDA request | That source keeps its last good raw files. Dependent marts are rebuilt from them while within `max_age_days`, and skipped after that (the old copy stays live). FDIC marts publish. Job exits red |
 | A research mart's check | That mart is not published (its old copy stays). The others publish. Job exits red |
-| A core mart's check (industry, snapshot, coverage, fail_panel) | Run stops, nothing is published (as today) |
+| A core mart's check (industry, snapshot, coverage) | Run stops, nothing is published (as today) |
+| The `fail_panel` check (PR 3: it is built on the non-critical failures source, so it is not core) | `fail_panel` and `failures_meta` are not published (old copies stay). The others publish. Job exits red |
 | The app finds a research mart missing or out of date | Panel hidden, or labeled "as of" |
 
 Publishing stays all-or-nothing for each mart. A mart is either fully
