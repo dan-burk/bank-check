@@ -4,8 +4,8 @@
 # reads ONLY from app/: shinylive exports the app directory alone.
 # Transport lives in R/api.R (auto-sourced first).
 #
-# Shipped data is .rds, not .csv, and the app avoids readr on purpose:
-# rds is ~4x smaller in the bundle and loads pre-parsed (parsing a 7 MB
+# Shipped data is parquet (the marts) or .rds, not .csv, and the app avoids
+# readr on purpose: both are ~4x smaller in the bundle and load pre-parsed (parsing a 7 MB
 # CSV inside WebAssembly is slow), and dropping readr removes seven
 # packages from the browser's cold-start download.
 
@@ -67,17 +67,17 @@ ytd_to_quarterly <- function(df, ytd_col, out_col) {
     dplyr::select(-yr)
 }
 
-# All ~570 post-2000 failures: pre-failure quarterly histories (0-20
-# quarters before failure) built once by app/build/build_fail_panel.R.
-# qtrs_before is stored in the rds; derive() adds the shared derived columns.
+# All ~580 post-2000 failures: pre-failure quarterly histories (0-20
+# quarters before failure), the fail_panel mart (pipeline/marts/fail_panel.R).
+# qtrs_before is stored in the mart; derive() adds the shared derived columns.
 load_fail_panel <- function() {
-  readRDS("data/fail_panel.rds") |> derive()
+  read_mart("fail_panel") |> derive()
 }
 
 # Picker metadata for the failures tab: label, region, size bucket. Banks
 # with zero pre-failure filings are excluded (nothing to draw).
 load_fail_meta <- function() {
-  readRDS("data/failures_meta.rds") |>
+  read_mart("failures_meta") |>
     dplyr::filter(n_filings > 0)
 }
 

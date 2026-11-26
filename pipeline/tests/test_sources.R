@@ -29,3 +29,17 @@ invisible(capture.output(p <- dep_problem("fresh", res, srcs, now)))
 expect(is.null(p), "a failed source with a recent good copy is usable")
 expect(grepl("stale", dep_problem("stale", res, srcs, now)), "past max_age_days -> stale")
 expect(grepl("no good copy", dep_problem("never", res, srcs, now)), "no copy -> skipped")
+
+# A mart set (fail_panel + failures_meta) is written or held back together
+MARTS <<- tempfile(); dir.create(MARTS)
+write_both <- function(path) for (p in path) writeLines("x", p)
+both <- file.path(MARTS, c("a.parquet", "b.parquet"))
+expect(build_optional_mart("a", "ok", res, write_both, also = "b") && all(file.exists(both)),
+       "a good mart set writes every file")
+invisible(capture.output(r <- build_optional_mart("a", "ok", res, also = "b",
+  function(path) { write_both(path); stop("check failed") })))
+expect(!r && !any(file.exists(both)), "a failed check removes every file of the set")
+registry <- SOURCES; SOURCES <<- srcs        # dep_problem reads the registry
+invisible(capture.output(r <- build_optional_mart("a", "stale", res, write_both, also = "b")))
+SOURCES <<- registry
+expect(r && !any(file.exists(both)), "a skipped set leaves no file, so the published copies stay")

@@ -9,6 +9,11 @@ raw_files <- function() {
                   full.names = TRUE), decreasing = TRUE)
 }
 
+# The quarter (integer YYYYMMDD) of each raw file path
+raw_rds <- function(files) {
+  as.integer(sub("^risdate\\.(\\d{8})\\.parquet$", "\\1", basename(files)))
+}
+
 # ---- Change check ----------------------------------------------------------
 # Every value that differs between the stored copy and the new pull, keyed by
 # CERT. Numbers compare with a small tolerance (JSON round-trips can wobble

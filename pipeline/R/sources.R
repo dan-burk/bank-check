@@ -14,7 +14,7 @@
 # downloaded from the release) and the run carries on. build.R then exits
 # with status 2, so the FDIC marts still publish but the job goes red.
 
-SOURCES <- list(fdic = SOURCE_FDIC, fred = SOURCE_FRED)
+SOURCES <- list(fdic = SOURCE_FDIC, fred = SOURCE_FRED, failures = SOURCE_FAILURES)
 
 # Run every source in order. Returns, per name, list(ok, value or error).
 run_sources <- function(sources, ctx) {
@@ -50,12 +50,15 @@ dep_problem <- function(name, results, sources = SOURCES, now = Sys.time()) {
   NULL
 }
 
-# Build and check one non-core mart into MARTS/<name>.parquet. build(path)
-# must check before it writes. Skipped (dependency unusable) or failed, the
-# file is absent, so the published copy stays live. Returns FALSE only if
-# the mart itself failed: a skip follows a source failure already counted.
-build_optional_mart <- function(name, deps, results, build) {
-  path <- file.path(MARTS, paste0(name, ".parquet"))
+# Build and check one non-core mart into MARTS/<name>.parquet (plus
+# MARTS/<also>.parquet for marts published as a set). build(path) must
+# check before it writes; path is named by mart. Skipped (dependency
+# unusable) or failed, every file of the set is absent, so the published
+# copies stay live together. Returns FALSE only if the mart itself failed:
+# a skip follows a source failure already counted.
+build_optional_mart <- function(name, deps, results, build, also = character()) {
+  path <- stats::setNames(file.path(MARTS, paste0(c(name, also), ".parquet")),
+                          c(name, also))
   unlink(path)
   why <- unlist(lapply(deps, dep_problem, results = results))
   if (length(why)) {

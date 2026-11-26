@@ -72,7 +72,10 @@ Everything comes from `api.fdic.gov` (CORS-open, no auth). See
 
 - **Nightly marts** — a GitHub Action pulls the last 10 quarters for every
   bank, logs any FDIC revisions, and builds `latest_snapshot` (peer bands
-  and the bank picker) and `industry_quarterly` (Industry tab). They live in
+  and the bank picker), `industry_quarterly` (Industry tab), and
+  `fail_panel` + `failures_meta` (failures tab: the 0-20 quarters before
+  each post-2000 failure, cut from the stored quarters, so no per-bank
+  requests; a new failure appears the night after FDIC lists it). They live in
   the `data-marts` GitHub Release; each deploy downloads them into
   `app/data/`, so both sites carry their own copy. To run the app locally,
   download them first:
@@ -84,11 +87,6 @@ Everything comes from `api.fdic.gov` (CORS-open, no auth). See
   95% as many banks have filed as in the quarter before it. Quarters open
   on the API as a trickle of early filers, and a half-filled cross-section
   would make every peer median quietly wrong rather than obviously absent.
-- **Not live** — pre-failure histories for all post-2000 failures ship in
-  `app/data/` and refresh only when you run
-  `app/build/build_fail_panel.R`. Failures are rare (6 across 2025-2026),
-  so re-fetching 581 banks' histories at every startup would not earn its
-  cost; rerun the builder after a failure you care about.
 - All dollar fields are $thousands, per FDIC convention.
 
 Not affiliated with the FDIC. Informational only, not financial advice.
