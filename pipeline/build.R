@@ -64,6 +64,19 @@ append_revisions(pulled$revisions)
 # ---- Marts, then checks: nothing is written unless all pass -----------------
 files <- raw_files()
 industry <- build_industry(files)
+
+# Auto-heal: FDIC sometimes restates quarters older than the window.
+# Re-pull those once (logging the revisions) and rebuild; the checks below
+# still fail the run if any quarter disagrees after that.
+stale <- stale_quarters(industry$raw_sums, quarters, newest)
+if (length(stale)) {
+  cat("Re-pulling", length(stale), "restated quarters:", stale, "\n")
+  healed <- pull_fdic(stale, seen)
+  manifest <- save_manifest(healed$manifest)
+  append_revisions(healed$revisions)
+  industry <- build_industry(files)
+}
+
 snapshot <- build_snapshot(newest)
 snap <- snapshot$snap
 check_snapshot(snap)
