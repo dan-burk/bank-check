@@ -1,13 +1,15 @@
-# Backtest step 3: one chart. For each failed bank, where it ranked among
-# all banks in each of the 4 quarters before it failed, under the baseline
+# Backtest charts. 1: for each 2022-2026 failure, where it ranked among all
+# banks in each of the 4 quarters before it failed, under the baselines
 # (reported equity / assets, Tier 1 leverage) and our score (adjusted
-# equity / assets, base). Reads failed_bank_ranks.csv from 02_backtest.R.
-# Run from the repo root:  Rscript research/backtest/03_chart.R
+# equity / assets, base). 2: AUC by era. Reads out/failed_bank_ranks.csv,
+# out/failures.csv and out/era_metrics.csv from analyze.R.
+# Run from the repo root:  Rscript research/backtest/chart.R
 
 library(ggplot2)
 DIR <- "research/backtest"
-fr <- read.csv(file.path(DIR, "failed_bank_ranks.csv"))
-fl <- read.csv(file.path(DIR, "failures.csv"))
+fr <- read.csv(file.path(DIR, "out", "failed_bank_ranks.csv"))
+fl <- read.csv(file.path(DIR, "out", "failures.csv"))
+fl <- fl[as.Date(fl$fail_date) >= as.Date("2022-01-01"), ]
 
 SHORT <- c("24735" = "Silicon Valley Bank", "57053" = "Signature Bank",
            "59017" = "First Republic", "25851" = "Heartland Tri-State",
@@ -65,7 +67,7 @@ g <- ggplot(long, aes(q, pct, colour = series, shape = series)) +
 ggsave(file.path(DIR, "failed_bank_ranks.png"), g, width = 13, height = 8.5, dpi = 150)
 
 # ---- Chart 2: AUC by era, with the 90% bootstrap range (era_metrics.csv) ----
-em <- read.csv(file.path(DIR, "era_metrics.csv"))
+em <- read.csv(file.path(DIR, "out", "era_metrics.csv"))
 ES <- c(eq_ta = "Reported equity / assets", tier1_leverage = "Tier 1 leverage",
         adj_eq = "Ours, floored (default)", adj_eq_sym = "Ours, symmetric (no floor)")
 em$score <- factor(ES[em$score], levels = rev(ES))

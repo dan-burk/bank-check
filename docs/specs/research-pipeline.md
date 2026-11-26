@@ -1,7 +1,7 @@
 # Spec: Fold the research prototypes into the data pipeline
 
-Status: PRs 1-6 implemented (see "PR order"); the rest is design. Inline
-"PR 3:" to "PR 6:" notes record where the code differs from this design.
+Status: PRs 1-7 implemented (see "PR order"); the rest is design. Inline
+"PR 3:" to "PR 7:" notes record where the code differs from this design.
 
 ## Goal
 
@@ -150,6 +150,22 @@ Notes:
   checks the row count and the total advances against the Fed's published
   totals, and writes the CSV. The CSV is a few hundred rows, so commit it
   to git under `pipeline/static/` next to its `.source.txt` (open question 6).
+
+PR 7: committed, as recommended (the Sources table's "release `data-raw`"
+is superseded): `pipeline/static/btfp.borrowers.csv`, one row per borrower
+RSSD (1,806 rows, 150 KB), and `btfp.source.txt` (a DCF record: URL, date,
+sha256 of the XLSX and the CSV, counts). BTFP is not in the registry, so it
+never runs at night and cannot block a publish. The XLSX states no totals
+and the Fed's page was not compared, so the check pins what the file holds
+(9,812 advances, 1,806 borrowers, $759.6B; the borrower count matches #21's
+separate parse) and the XLSX sha256. The join check: at least 60% of
+borrowers are banks in `bank_ids` (73.5%; the rest are credit unions). The
+reader now picks the sheet by its `Borrower RSSD` header, reads inline and
+formula strings, and parses numbers and Excel dates with a stop on any NA
+(trap 11). The backtest reads `hidden_loss_history`, `bank_ids`, raw
+`RBC1AAJ`, `failures.parquet` and this CSV; `TODAY` is the failures
+manifest's `pulled_at` (the labels come from that list). Its committed
+result CSVs moved to a gitignored `out/`.
 
 ### The FDIC raw file gets wider
 
@@ -438,7 +454,7 @@ Each PR is small, leaves main working, and can ship alone.
 | 4 | **Wider FDIC raw** (`RESEARCH_FIELDS`), schema-change rows in the diff, `research_field_coverage`, one-time 171-quarter backfill. Includes the `bank_ids` mart (FDIC part) | M | 1 | coverage report |
 | 5 | **`hidden_loss` and `hidden_loss_history` marts**: `R/hidden_loss.R`, checks, golden tests. Trim `research/unrealized-losses` to README plus analysis reading the mart. Close #19 | M | 2, 4 | marts (no UI yet) |
 | 6 | **`run_stress` mart**: `R/run_stress.R`, checks, SVB/Republic First golden tests. Trim `research/run-stress`. Close #22 | S | 5 | mart |
-| 7 | **BTFP static file**, then re-point `research/backtest` at the marts. Delete its fetch and probe. Close #21 | S | 3, 5 | research reproducible from releases |
+| 7 | **BTFP static file**, then re-point `research/backtest` at the marts. Delete its fetch and probe. Close #21. Done | S | 3, 5 | research reproducible from releases |
 | 8 | **App: hidden loss and breaking point** on the bank view (deploy pattern, missing-mart handling, smoke test) | M | 5, 6 | first user-visible change |
 | 9 | **HMDA source** (`hmda.yml`, snapshot stream and filter, `hmda.panel`, `bank_ids` LEI links, `hmda.groups`) | L | 2, 4 | raw HMDA in the release |
 | 10 | **`hmda_book` mart** plus golden test. Trim `research/hmda-mortgage-rates`. Close #20 | M | 9 | mart |

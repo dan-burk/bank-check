@@ -37,6 +37,7 @@ flowchart LR
 | Extract: FDIC quarters to pull, one quarter per request (paged) | `pipeline/sources/fdic.R` |
 | Extract: FRED series, pull check, diff, store | `pipeline/sources/fred.R` |
 | Extract: FDIC failures list, pull check, diff, store | `pipeline/sources/failures.R` |
+| One-time static source, run by hand: Fed BTFP borrowers (not in the nightly run) | `pipeline/sources/btfp.R` -> `pipeline/static/` |
 | Estimators: pure functions, data frames in and out (shared with research) | `pipeline/R/hidden_loss.R`, `pipeline/R/run_stress.R` |
 | Marts: `industry_quarterly` + `field_coverage`, `latest_snapshot`, `rates_monthly`, `fail_panel` + `failures_meta`, `research_field_coverage`, `bank_ids`, `hidden_loss` + `hidden_loss_history`, `run_stress` | `pipeline/marts/industry.R`, `pipeline/marts/snapshot.R`, `pipeline/marts/rates.R`, `pipeline/marts/fail_panel.R`, `pipeline/marts/research_coverage.R`, `pipeline/marts/bank_ids.R`, `pipeline/marts/hidden_loss.R`, `pipeline/marts/run_stress.R` |
 | Mart checks, one file per mart (plus the `check()` helper) | `pipeline/checks/industry.R`, `pipeline/checks/snapshot.R`, `pipeline/checks/rates.R`, `pipeline/checks/fail_panel.R`, `pipeline/checks/research_coverage.R`, `pipeline/checks/bank_ids.R`, `pipeline/checks/hidden_loss.R`, `pipeline/checks/run_stress.R`, `pipeline/checks/check.R` |
@@ -259,6 +260,14 @@ Planned: `peer_bands_quarterly` (historical peer bands).
 | FDIC failures | `sources/failures.R` | nightly, 1 request (about 4,100 rows; the list changes a few times a year) | diff by CERT + FAILDATE (by name too for the pre-1977 rows that have no CERT) | `failures.parquet` (every RESTYPE since 1934, as sent), `failures.manifest.csv`, `failures.revisions.csv` | row count = API total, every FAILDATE parses (`M/D/YYYY`), no CERT missing since 1984, no duplicate key, never fewer rows than stored, SVB, Signature and First Republic present with 2023 dates | no |
 | FRED `DGS10` (daily), `MORTGAGE30US`, `MORTGAGE15US` (weekly) | `sources/fred.R` | nightly, full history, 1 keyless `fredgraph.csv` request per series | diff by date against the stored file | `fred.<SERIES>.csv`, `fred.manifest.csv`, `fred.revisions.csv` | header as expected, every value parses (blank or `.` is NA), not empty, no duplicate dates, values in [0, 25]%, newest observation at most 7 days old (daily) or 10 (weekly), history shrinks by at most 5 rows | no |
 
+| Fed BTFP borrower disclosure | `sources/btfp.R` | manual, once (the program ended in 2024; the Fed's March 2025 file is final). Not in the registry, so it never runs at night and cannot block or delay a publish | none: the XLSX's sha256 is pinned, and a re-download that differs stops | committed to git, not the release: `pipeline/static/btfp.borrowers.csv` (one row per borrower RSSD: name, city, state, advances count and $ thousands, first and last advance, last repayment) and `btfp.source.txt` (URL, download date, XLSX and CSV sha256, counts) | every advance has an RSSD, amount and dates; 9,812 advances, 1,806 borrowers, $759.6B as recorded; at least 60% of borrowers join to `bank_ids` by RSSD (73.5%: the rest are credit unions and other lenders). The offline tests re-check the committed CSV against its source record | no |
+
+**Why BTFP is committed, not in the release.** The file is final and small
+(1,806 rows, 150 KB), so git history never grows from it, the nightly job
+need not carry it, and research reads it with no download step (spec open
+question 6). Join it to banks by RSSD: through `bank_ids` for "is this
+borrower a bank", or on a quarter's raw `RSSDID` for a dated match.
+
 FRED is pulled and diffed every night instead of cached, so a series that
 stops updating fails the newest-observation check rather than going stale
 silently. Every series is checked before any is stored, so the FRED files
@@ -291,6 +300,7 @@ in the release always come from one good pull.
 |---|---|---|
 | Raw, `manifest.csv`, `revisions.csv`, `fred.*`, `failures.*` | GitHub Release `data-raw` | Free, up to 2 GB per file, kept out of git history so the repo does not grow |
 | Marts | GitHub Release `data-marts` | Same |
+| Static one-time sources (BTFP) | git, `pipeline/static/` | Final and small; see the Sources table |
 | Marts for the browser build | Downloaded into `app/data/` at deploy, by name, bundled into `app.json` | Small (about 5 MB, 3 MB of it `fail_panel`, gzip because zstd came out at 4.4 MB); same code path as shinyapps.io |
 | Marts for shinyapps.io | Downloaded into `app/data/` at deploy, shipped in its bundle | See below |
 
@@ -370,6 +380,10 @@ A local run compares against whatever raw files are already in
 published history, download it first:
 `gh release download data-raw --dir pipeline/out/raw --pattern 'risdate.*.parquet'`
 (and `--pattern 'fred.*'` and `--pattern 'failures.*'` for the other sources).
+
+To rebuild the BTFP file (only if the Fed replaces it):
+`Rscript pipeline/sources/btfp.R`. It needs `pipeline/out/marts/bank_ids.parquet`
+and downloads the XLSX to `pipeline/out/cache/btfp/` (gitignored).
 
 The script reuses the app's own API client (`app/R/api.R`) and
 `industry_totals()` (`app/R/statements.R`), so its numbers match the app.
