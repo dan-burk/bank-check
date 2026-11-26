@@ -310,6 +310,7 @@ Cloudflare R2. Only the download and upload commands change.
 | Single-bank histories | Stay live from the FDIC API |
 | Revision window | Re-check the last 10 quarters every night |
 | Parquet reader | `nanoparquet` (small, works in the browser). Not `duckdb`: 9.4 MB extra download in the browser |
+| nanoparquet version | At least 0.5.2: 0.5.1 returns garbage for NAs when `read_parquet()` uses `col_select`, which corrupted the research marts in CI. CI's Posit snapshot (2026-09-17) has 0.5.2; `build.R` refuses older and `tests/test_nanoparquet.R` checks the behavior |
 | Database server | None. Static files on GitHub are the store |
 
 ## API etiquette
@@ -372,4 +373,4 @@ published history, download it first:
 
 The script reuses the app's own API client (`app/R/api.R`) and
 `industry_totals()` (`app/R/statements.R`), so its numbers match the app.
-Needs the `nanoparquet` package.
+Needs the `nanoparquet` package, version 0.5.2 or later.

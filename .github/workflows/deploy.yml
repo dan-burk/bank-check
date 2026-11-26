@@ -35,7 +35,9 @@ env:
   # Binary repo for the pinned runner distro (noble = ubuntu-24.04).
   # __linux__ is a literal P3M path segment; it serves noble binaries to
   # R's install.packages and falls back to source where none exists.
-  PKG_REPO: "https://packagemanager.posit.co/cran/__linux__/noble/2026-07-15"
+  # 2026-09-17 is the first snapshot with nanoparquet 0.5.2 (0.5.1 corrupts
+  # NAs under col_select); pipeline/build.R checks the version.
+  PKG_REPO: "https://packagemanager.posit.co/cran/__linux__/noble/2026-09-17"
 
 jobs:
   test:
@@ -51,7 +53,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.R_LIBS_USER }}
-          key: rlib-test-noble-r451-snap20260715-${{ hashFiles('DESCRIPTION') }}
+          key: rlib-test-noble-r451-snap20260917-${{ hashFiles('DESCRIPTION') }}
 
       # The app's direct dependencies come from DESCRIPTION Imports (one
       # list, no drift); install.packages pulls them plus dependencies
@@ -114,7 +116,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.R_LIBS_USER }}
-          key: rlib-deploy-noble-r451-snap20260715-${{ hashFiles('DESCRIPTION') }}
+          key: rlib-deploy-noble-r451-snap20260917-${{ hashFiles('DESCRIPTION') }}
 
       # rsconnect records the versions installed here and shinyapps.io
       # restores exactly those, so the snapshot-pinned set is what serves

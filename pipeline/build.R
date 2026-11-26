@@ -42,6 +42,8 @@
 # (pulls), pipeline/marts/ (builders) and pipeline/checks/.
 
 suppressPackageStartupMessages(library(nanoparquet))
+if (packageVersion("nanoparquet") < "0.5.2")
+  stop("nanoparquet >= 0.5.2 required: 0.5.1 reads NAs as garbage under col_select (#170)")
 
 ARG <- commandArgs(trailingOnly = TRUE)[1]
 SAMPLE <- !is.na(ARG) && grepl(",", ARG)   # explicit quarter list
