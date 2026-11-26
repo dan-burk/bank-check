@@ -2,12 +2,14 @@
 
 A nightly job pulls every bank's quarterly filings from the FDIC API, stores
 them as one parquet file per quarter (**raw**), and builds small finished
-tables (**marts**) that the app reads. Single-bank histories are the one
-thing the app still fetches live from the FDIC API.
+tables (**marts**) that the app reads. It also pulls a few FRED rate series
+for the research marts (see [Sources](#sources)). Single-bank histories are
+the one thing the app still fetches live from the FDIC API.
 
 ```mermaid
 flowchart LR
   FDIC[FDIC API] -->|nightly, last 10 quarters| X[Extract]
+  FRED[FRED, not critical] -.->|nightly, full series| X
   X --> C[Change check<br/>new pull vs stored]
   C -->|diffs| REV[(revisions log)]
   C --> RAW[(Raw<br/>1 parquet per quarter)]
@@ -26,11 +28,14 @@ flowchart LR
 | Piece | File |
 |---|---|
 | Entry point: runs the steps below in order | `pipeline/build.R` |
-| Throttled transport (2 s gap, retries, request count) | `pipeline/R/http.R` |
+| Throttled transport (2 s gap per host, retries, request count) | `pipeline/R/http.R` |
 | Raw store: quarter files, change check, manifest, revisions log | `pipeline/R/store.R` |
+| Source registry, non-critical failure handling | `pipeline/R/sources.R` |
 | Extract: FDIC quarters to pull, one quarter per request (paged) | `pipeline/sources/fdic.R` |
-| Marts: `industry_quarterly` + `field_coverage`, `latest_snapshot` | `pipeline/marts/industry.R`, `pipeline/marts/snapshot.R` |
-| Mart checks, one file per mart (plus the `check()` helper) | `pipeline/checks/industry.R`, `pipeline/checks/snapshot.R`, `pipeline/checks/check.R` |
+| Extract: FRED series, pull check, diff, store | `pipeline/sources/fred.R` |
+| Marts: `industry_quarterly` + `field_coverage`, `latest_snapshot`, `rates_monthly` | `pipeline/marts/industry.R`, `pipeline/marts/snapshot.R`, `pipeline/marts/rates.R` |
+| Mart checks, one file per mart (plus the `check()` helper) | `pipeline/checks/industry.R`, `pipeline/checks/snapshot.R`, `pipeline/checks/rates.R`, `pipeline/checks/check.R` |
+| Offline golden tests of the pure functions | `pipeline/tests/run.R` (CI: `.github/workflows/pipeline-test.yml`) |
 | Nightly run, upload, deploy trigger | `.github/workflows/pipeline.yml` |
 | Download marts before test and deploy | `.github/workflows/deploy.yml` |
 | App reads the marts | `app/R/data.R` (`load_snapshot`, `load_industry`) |
@@ -77,11 +82,21 @@ committed to git.
    and rebuilds the marts. The checks then run as usual. If a quarter
    pulled this run disagrees, or more than 8 are stale, or a re-pulled
    quarter still disagrees, the run fails as before.
-6. **Publish.** Upload the quarters pulled this run, `manifest.csv` and
-   `revisions.csv` to the `data-raw` release. If any mart changed
-   (byte comparison with the published copy), upload the marts to
-   `data-marts` and start the deploy. Most nights nothing changed and
-   nothing deploys.
+6. **Publish.** Upload the quarters pulled this run, `manifest.csv`,
+   `revisions.csv` and the `fred.*` files written this run to the
+   `data-raw` release. If any mart changed (byte comparison with the
+   published copy), upload the marts to `data-marts`, and start the deploy
+   if one the app reads changed (`rates_monthly` alone does not deploy).
+   Most nights nothing changed and nothing deploys.
+
+Steps 1 to 3 run for each source in the registry (`pipeline/R/sources.R`),
+FDIC first. What a failure does depends on what failed:
+
+| What fails | What happens |
+|---|---|
+| FDIC request or check, or a core mart's check (`industry_quarterly`, `field_coverage`, `latest_snapshot`) | Run stops, nothing is published |
+| FRED request or pull check | FRED keeps its last good raw files (downloaded from the release). `rates_monthly` is rebuilt from them while they are under 10 days old, and skipped after that, so the published copy stays. FDIC publishes. `build.R` exits with status 2 and the job fails at the end, so GitHub emails |
+| `rates_monthly` check | That mart is not published (its old copy stays). The others publish. Job fails at the end |
 
 ## Marts
 
@@ -90,6 +105,14 @@ committed to git.
 | `industry_quarterly` | quarter, every `STATEMENT_FIELDS` field summed (NA where `field_coverage` is below `COVERAGE_MIN`): the statement lines plus the numerators and denominators of the "All banks" chart lines | Industry tab: table and charts; industry lines on the metric charts |
 | `field_coverage` | quarter × statement field: banks reporting it and their share of assets | Audit of gaps; the checks in `pipeline/checks/` |
 | `latest_snapshot` | bank in the newest quarter, plus active banks that have not filed yet | Peer bands (banks that filed) and the bank picker (`active` banks) |
+| `rates_monthly` | FRED series × month: `avg`, `last`, `n_obs`, `n_missing` (blank days), `complete` (FALSE for the month to date), `method_break` | Input to the planned hidden-loss and HMDA marts. Not read by the app yet |
+
+`rates_monthly.month_end` is the month's last day as `YYYYMMDD`, so in
+quarter-end months it equals `RISDATE`. Missing days (holidays) are left
+out of `avg` and counted in `n_missing`, never filled with 0.
+`method_break` is TRUE in November 2022 for `MORTGAGE30US` and
+`MORTGAGE15US`: Freddie Mac moved its survey to application data then,
+a small level break that rate gaps spanning that month should allow for.
 
 `latest_snapshot` has an `active` flag because "banks in the latest
 quarter" is not the same as "active banks": the quarter includes clearing
@@ -103,11 +126,44 @@ once the one-time backfill has run (`quarters = 171` on the workflow; see
 Planned: `peer_bands_quarterly` (historical peer bands) and `fail_panel`
 moved into this pipeline.
 
+## Sources
+
+| Source | Module | Cadence | Change check | Raw files (release `data-raw`) | Checks on each pull | Critical |
+|---|---|---|---|---|---|---|
+| FDIC financials | `sources/fdic.R` | nightly, re-pulls the last 10 quarters | keyed diff of each quarter against the stored file | `risdate.YYYYMMDD.parquet`, `manifest.csv`, `revisions.csv` | row count = API total, no duplicate CERTs, then the mart checks | yes |
+| FRED `DGS10` (daily), `MORTGAGE30US`, `MORTGAGE15US` (weekly) | `sources/fred.R` | nightly, full history, 1 keyless `fredgraph.csv` request per series | diff by date against the stored file | `fred.<SERIES>.csv`, `fred.manifest.csv`, `fred.revisions.csv` | header as expected, every value parses (blank or `.` is NA), not empty, no duplicate dates, values in [0, 25]%, newest observation at most 7 days old (daily) or 10 (weekly), history shrinks by at most 5 rows | no |
+
+FRED is pulled and diffed every night instead of cached, so a series that
+stops updating fails the newest-observation check rather than going stale
+silently. Every series is checked before any is stored, so the FRED files
+in the release always come from one good pull.
+
+## Adding a source
+
+1. Write `pipeline/sources/<name>.R`. It defines `SOURCE_<NAME>`, a list
+   with `name`, `critical` (start with `FALSE`), `cadence`,
+   `max_age_days`, `run(ctx)` and `last_pull()` (the contract is at the
+   top of `pipeline/R/sources.R`). `run()` pulls, checks, and only then
+   stores, so a bad pull never replaces the last good files. Fetch through
+   `polite_get()` (`pipeline/R/http.R`) so the throttle and retries apply.
+2. Add it to `SOURCES` in `pipeline/R/sources.R` and source the file in
+   `pipeline/build.R` before `R/sources.R`. Name its raw files
+   `<name>.*`, and add that pattern to the download and upload steps in
+   `.github/workflows/pipeline.yml`.
+3. Join to banks through CERT (later the `bank_ids` crosswalk). Never
+   match on names.
+4. Write the mart (`pipeline/marts/`) and its check (`pipeline/checks/`),
+   and build it in `build.R` with `build_optional_mart(name, deps, ...)`
+   so it is skipped or fails on its own. Add a golden test to
+   `pipeline/tests/` if it computes anything. If the app does not read
+   the mart yet, add it to `NO_DEPLOY` in `pipeline.yml`.
+5. Add it to the Sources table above.
+
 ## Storage
 
 | What | Where | Why |
 |---|---|---|
-| Raw, `manifest.csv`, `revisions.csv` | GitHub Release `data-raw` | Free, up to 2 GB per file, kept out of git history so the repo does not grow |
+| Raw, `manifest.csv`, `revisions.csv`, `fred.*` | GitHub Release `data-raw` | Free, up to 2 GB per file, kept out of git history so the repo does not grow |
 | Marts | GitHub Release `data-marts` | Same |
 | Marts for the browser build | Downloaded into `app/data/` at deploy, bundled into `app.json` | Small (about 2 MB); same code path as shinyapps.io |
 | Marts for shinyapps.io | Downloaded into `app/data/` at deploy, shipped in its bundle | See below |
@@ -134,9 +190,10 @@ Cloudflare R2. Only the download and upload commands change.
 
 Never loop over banks; loop over quarters. One request at a time, at least
 2 seconds apart. On failure, retry after 10 s, 30 s, then 90 s, then stop
-the run without publishing. A nightly run is 15 requests and takes about
-2 minutes, plus one request per restated quarter on the rare nights that
-auto-heal runs.
+the run without publishing. A nightly run is 15 FDIC requests and takes
+about 2 minutes, plus one request per restated quarter on the rare nights
+that auto-heal runs. FRED gets the same treatment (2 s gap per host, same
+retries), 3 requests a night; when its retries run out only FRED fails.
 
 ## Running it locally
 
@@ -161,12 +218,20 @@ Output goes to `pipeline/out/` (gitignored):
 | `raw/risdate.YYYYMMDD.parquet` | Every bank for one quarter: the app's fields plus CITY |
 | `raw/manifest.csv` | One row per quarter pulled: bank count, file size, md5, changes found |
 | `revisions.csv` | Appended log of values FDIC changed since the last pull |
+| `raw/fred.*.csv` | FRED series, their manifest and revisions log |
 | `marts/*.parquet` | The marts |
+
+`build.R` exits 0 when everything passed, 1 when FDIC or a core mart
+failed (nothing written), and 2 when only a non-critical source or mart
+failed (FDIC marts written). `FRED_BASE_URL` overrides the FRED endpoint,
+for testing the failure path. The offline tests:
+`Rscript pipeline/tests/run.R`.
 
 A local run compares against whatever raw files are already in
 `pipeline/out/raw/`, not the published ones. To continue from the
 published history, download it first:
-`gh release download data-raw --dir pipeline/out/raw --pattern 'risdate.*.parquet'`.
+`gh release download data-raw --dir pipeline/out/raw --pattern 'risdate.*.parquet'`
+(and `--pattern 'fred.*'` for the FRED files).
 
 The script reuses the app's own API client (`app/R/api.R`) and
 `industry_totals()` (`app/R/statements.R`), so its numbers match the app.

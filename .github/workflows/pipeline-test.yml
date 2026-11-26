@@ -1,0 +1,46 @@
+# Offline golden tests of the pipeline's pure functions
+# (pipeline/tests/run.R). No network, no release downloads. deploy.yml
+# only watches app/**, so pipeline changes are tested here.
+name: Pipeline tests
+
+on:
+  push:
+    branches: [main]
+    paths: ["pipeline/**", "app/R/api.R", ".github/workflows/pipeline-test.yml"]
+  pull_request:
+    paths: ["pipeline/**", "app/R/api.R", ".github/workflows/pipeline-test.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PKG_REPO: "https://packagemanager.posit.co/cran/__linux__/noble/2026-07-15"
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-r
+        with:
+          r-version: "4.5.1"
+
+      # Same key as the deploy and pipeline workflows, so it reuses that cache
+      - name: Cache R packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.R_LIBS_USER }}
+          key: rlib-test-noble-r451-snap20260715-${{ hashFiles('DESCRIPTION') }}
+
+      - name: Install pinned packages
+        run: |
+          Rscript -e '
+            options(timeout = 300, warn = 1)
+            pkgs <- trimws(strsplit(read.dcf("DESCRIPTION")[, "Imports"], ",")[[1]])
+            install.packages(pkgs, repos = Sys.getenv("PKG_REPO"))
+          '
+
+      - name: Run pipeline tests
+        run: Rscript pipeline/tests/run.R
