@@ -18,6 +18,11 @@ also fails ("can't pay").
 
 ## Run it
 
+`simulate.R` sources the research estimator, which moved into the pipeline
+(`pipeline/R/hidden_loss.R`, mart `hidden_loss`). Until the simulator moves
+too (spec `docs/specs/research-pipeline.md`, PR 6), run these at commit
+`a4420c5`, the last commit that has the old estimator.
+
 ```sh
 Rscript research/backtest/01_fetch.R     # estimator fields, all quarters (cached)
 Rscript research/run-stress/01_fetch.R   # cash, fed funds, FHLB, ... (cached)

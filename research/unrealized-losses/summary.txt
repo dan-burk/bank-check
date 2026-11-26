@@ -1,114 +1,51 @@
-== Latest 20260930 (4263 banks; 30y mortgage 6.86%, 10y Treasury 4.99%)
-HTM securities loss (reported): $296B
-AFS securities loss (reported): $190B
-Securities total (reported):    $486B
-Securities total (our model):   $392B (bank-level correlation with reported: 0.99)
-Loan MTM loss (model): 1-4 fam $141B + other $117B = $258B
-Hidden loss (HTM + loans):      $554B vs total equity $2582B = 21.4%
-Median bank loan yield 6.6%; median rate gap 0.2%; 117 banks with yield imputed
-Banks with adjusted equity < 0: 30 (assets $43B)
-Banks with adjusted equity < 0, $100B+: 0
-Run-risk flags (adj equity < 0 AND uninsured > 50.0%): 0
-Calibrated variant (loan loss x 1.24): loans $320B; adj equity < 0: 61 banks (assets $371B); run-risk flags: 0
-Banks with uninsured share > 50.0%: 248
+== 20260930: 4284 filers, 4267 with an estimate (17 NA: no equity or assets; no loan maturity buckets x17); 30y mortgage 6.86%, 10y Treasury 4.99%
+Securities loss (reported): HTM $296B + AFS $191B = $487B | our model on securities: $392B
+Loan loss (model): 1-4 family $141B + other $117B = $258B
+Hidden loss (HTM + loans): $554B vs equity $2582B = 21.4%
+Median loan yield 6.6%; median rate gap 0.2%; 134 yields imputed
+Adjusted equity < 0: 34 banks (assets $46B); with uninsured > 50%: 1
+Calibrated (loans x 1.24): loans $320B; adjusted equity < 0: 65 banks (assets $374B); flags 1
 
-Top 25 by hidden loss / equity (ASSET in $B):
-  CERT                         NAME ASSET_B  hid/eq adjEq/A adjEqCal/A unins  flag flagCal rk_hid rk_adjEq rk_unins rk_inHiUnins
- 28515         TRUSTTEXAS BANK, SSB     0.4 656.803  -0.087     -0.108 0.261 FALSE   FALSE      1        2     1968           NA
- 28266       CONNECT COMMUNITY BANK     0.1   3.746  -0.085     -0.109 0.030 FALSE   FALSE      2        3     4168           NA
- 27201         COMMUNITY STATE BANK     0.1   2.275  -0.096     -0.096 0.186 FALSE   FALSE      3        1     2973           NA
- 29430         COMPASS SAVINGS BANK     0.1   1.729  -0.052     -0.082 0.034 FALSE   FALSE      4        5     4160           NA
- 29980 MIDLAND FEDERAL SAVINGS AND      0.1   1.694  -0.058     -0.083 0.050 FALSE   FALSE      5        4     4132           NA
- 27567 THE GLEN BURNIE MUTUAL SAVIN     0.1   1.536  -0.049     -0.083 0.088 FALSE   FALSE      6        6     3963           NA
- 31945                 TRUSTCO BANK     6.5   1.489  -0.043     -0.074 0.224 FALSE   FALSE      7        7     2451           NA
-  8681      LAMONT BANK OF ST. JOHN     0.1   1.487  -0.009     -0.015 0.087 FALSE   FALSE      8       22     3976           NA
-  7025 THE DELAWARE NATIONAL BANK O     0.4   1.402  -0.030     -0.055 0.332 FALSE   FALSE      9        8     1127           NA
- 29744          FIRST SEACOAST BANK     0.5   1.319  -0.023     -0.046 0.280 FALSE   FALSE     10       10     1689           NA
-  2496       THE NATIONAL IRON BANK     0.3   1.316  -0.024     -0.046 0.394 FALSE   FALSE     11        9      681           NA
-  3639 FIRST NATIONAL BANK & TRUST      0.4   1.279  -0.004     -0.005 0.255 FALSE   FALSE     12       24     2046           NA
- 27015        42 NORTH PRIVATE BANK     0.2   1.270  -0.018     -0.039 0.167 FALSE   FALSE     13       14     3227           NA
-  7631                     UNB BANK     0.2   1.266  -0.014     -0.029 0.099 FALSE   FALSE     14       17     3896           NA
-  2608 THE NATIONAL GRAND BANK OF M     0.4   1.248  -0.022     -0.048 0.243 FALSE   FALSE     15       11     2193           NA
- 29838 FIRST FEDERAL SAVINGS AND LO     0.6   1.227  -0.021     -0.047 0.229 FALSE   FALSE     16       13     2393           NA
- 35393            UNITED TRUST BANK     0.2   1.217  -0.021     -0.050 0.262 FALSE   FALSE     17       12     1953           NA
- 26576   WRENTHAM CO-OPERATIVE BANK     0.2   1.213  -0.018     -0.040 0.246 FALSE   FALSE     18       15     2166           NA
- 19440         FIRST FINANCIAL BANK     0.2   1.209  -0.003     -0.008 0.227 FALSE   FALSE     19       25     2422           NA
- 57137                 MISSION BANK     0.2   1.199  -0.014     -0.014 0.214 FALSE   FALSE     20       16     2599           NA
- 31994 SLOVENIAN SAVINGS AND LOAN A     0.2   1.194  -0.012     -0.029 0.050 FALSE   FALSE     21       18     4130           NA
-  6078            ONE AMERICAN BANK     0.3   1.107  -0.011     -0.040 0.105 FALSE   FALSE     22       19     3846           NA
- 18053               BANK OF HAWAII    23.8   1.106  -0.008     -0.019 0.468 FALSE   FALSE     23       23      349           NA
- 27760       WEST VIEW SAVINGS BANK     0.4   1.092  -0.009     -0.016 0.061 FALSE   FALSE     24       21     4078           NA
- 29809 FIRST SAVINGS BANK OF HEGEWI     0.8   1.074  -0.011     -0.036 0.066 FALSE   FALSE     25       20     4059           NA
+Worst 25 by adjusted equity / assets (pct_worst: share of banks at or below):
+  CERT                         NAME ASSET_B hidden_M adjEq_A adjEqCal_A unins pct_worst  flag flagCal
+ 27201         COMMUNITY STATE BANK     0.1       16  -0.096     -0.096  0.19    0.0002 FALSE   FALSE
+ 28515         TRUSTTEXAS BANK, SSB     0.4       33  -0.087     -0.108  0.26    0.0005 FALSE   FALSE
+ 28266       CONNECT COMMUNITY BANK     0.1        8  -0.085     -0.109  0.03    0.0007 FALSE   FALSE
+ 12013    UNION COUNTY SAVINGS BANK     1.4       24  -0.067     -0.071  0.16    0.0009 FALSE   FALSE
+ 29980 MIDLAND FEDERAL SAVINGS AND      0.1       16  -0.058     -0.083  0.05    0.0012 FALSE   FALSE
+ 29430         COMPASS SAVINGS BANK     0.1        7  -0.052     -0.082  0.03    0.0014 FALSE   FALSE
+ 27567 THE GLEN BURNIE MUTUAL SAVIN     0.1       14  -0.049     -0.083  0.09    0.0016 FALSE   FALSE
+ 31945                 TRUSTCO BANK     6.5      844  -0.043     -0.074  0.22    0.0019 FALSE   FALSE
+  2359    MAUCH CHUNK TRUST COMPANY     0.7       19  -0.033     -0.037  0.25    0.0021 FALSE   FALSE
+  7025 THE DELAWARE NATIONAL BANK O     0.4       40  -0.030     -0.055  0.33    0.0023 FALSE   FALSE
+  2496       THE NATIONAL IRON BANK     0.3       34  -0.024     -0.046  0.39    0.0026 FALSE   FALSE
+ 29744          FIRST SEACOAST BANK     0.5       47  -0.023     -0.046  0.28    0.0028 FALSE   FALSE
+ 15326    THE UNION BANKING COMPANY     0.1        1  -0.022     -0.025  0.27    0.0031 FALSE   FALSE
+  2608 THE NATIONAL GRAND BANK OF M     0.4       49  -0.022     -0.048  0.24    0.0033 FALSE   FALSE
+ 35393            UNITED TRUST BANK     0.2       22  -0.021     -0.050  0.26    0.0035 FALSE   FALSE
+ 29838 FIRST FEDERAL SAVINGS AND LO     0.6       64  -0.021     -0.047  0.23    0.0037 FALSE   FALSE
+ 27015        42 NORTH PRIVATE BANK     0.2       16  -0.018     -0.039  0.17    0.0040 FALSE   FALSE
+ 26576   WRENTHAM CO-OPERATIVE BANK     0.2       20  -0.018     -0.040  0.25    0.0042 FALSE   FALSE
+ 57137                 MISSION BANK     0.2       16  -0.014     -0.014  0.21    0.0044 FALSE   FALSE
+  7631                     UNB BANK     0.2       11  -0.014     -0.029  0.10    0.0047 FALSE   FALSE
+ 31994 SLOVENIAN SAVINGS AND LOAN A     0.2       13  -0.012     -0.029  0.05    0.0049 FALSE   FALSE
+  6078            ONE AMERICAN BANK     0.3       31  -0.011     -0.040  0.11    0.0052 FALSE   FALSE
+ 29809 FIRST SAVINGS BANK OF HEGEWI     0.8      127  -0.011     -0.036  0.07    0.0054 FALSE   FALSE
+    41           PHENIX-GIRARD BANK     0.3        0  -0.009     -0.009  0.52    0.0056  TRUE    TRUE
+ 27760       WEST VIEW SAVINGS BANK     0.4       38  -0.009     -0.016  0.06    0.0059 FALSE   FALSE
 
-Flagged run-risk banks, latest:
- [1] CERT         NAME         ASSET_B      hid/eq       adjEq/A      adjEqCal/A   unins        flag         flagCal      rk_hid       rk_adjEq     rk_unins     rk_inHiUnins
-<0 rows> (or 0-length row.names)
+== 20221231: 4773 filers, 4756 with an estimate (17 NA: no equity or assets; no loan maturity buckets x17); 30y mortgage 6.36%, 10y Treasury 3.62%
+Securities loss (reported): HTM $341B + AFS $278B = $619B | our model on securities: $339B
+Loan loss (model): 1-4 family $193B + other $185B = $378B
+Hidden loss (HTM + loans): $718B vs equity $2216B = 32.4%
+Median loan yield 5.2%; median rate gap 1.2%; 131 yields imputed
+Adjusted equity < 0: 243 banks (assets $1056B); with uninsured > 50%: 10
+Calibrated (loans x 1.82): loans $689B; adjusted equity < 0: 855 banks (assets $2345B); flags 33
 
-== Backtest 20221231 (4735 banks; 30y mortgage 6.36%, 10y Treasury 3.62%)
-HTM securities loss (reported): $340B
-AFS securities loss (reported): $276B
-Securities total (reported):    $616B
-Securities total (our model):   $339B (bank-level correlation with reported: 0.99)
-Loan MTM loss (model): 1-4 fam $193B + other $185B = $378B
-Hidden loss (HTM + loans):      $718B vs total equity $2217B = 32.4%
-Median bank loan yield 5.2%; median rate gap 1.2%; 114 banks with yield imputed
-Banks with adjusted equity < 0: 222 (assets $1046B)
-Banks with adjusted equity < 0, $100B+: 3
-Run-risk flags (adj equity < 0 AND uninsured > 50.0%): 10
-Calibrated variant (loan loss x 1.82): loans $687B; adj equity < 0: 834 banks (assets $2335B); run-risk flags: 33
-Banks with uninsured share > 50.0%: 353
-
-Backtest: ranks out of 4735 banks (1 = worst)
-  CERT                NAME ASSET_B hid/eq adjEq/A adjEqCal/A unins  flag flagCal rk_hid rk_adjEq rk_unins rk_inHiUnins
- 24735 SILICON VALLEY BANK   209.0  0.992   0.001      0.000 0.939 FALSE    TRUE    228      230       11           11
- 57053      SIGNATURE BANK   110.4  0.335   0.048      0.034 0.897 FALSE   FALSE   1940     1631       16           93
- 59017 FIRST REPUBLIC BANK   212.6  1.446  -0.037     -0.115 0.677  TRUE    TRUE     64       30       81            3
-
-Backtest: run-risk flagged banks at 2022Q4:
-  CERT                         NAME ASSET_B hid/eq adjEq/A adjEqCal/A unins flag flagCal rk_hid rk_adjEq rk_unins rk_inHiUnins
- 18983              RIVER CITY BANK     4.0  1.010  -0.001     -0.073 0.592 TRUE    TRUE    218      211      157           10
- 23474 THE AMERICAN NATIONAL BANK O     5.5  1.241  -0.007     -0.037 0.512 TRUE    TRUE    109      159      318            7
- 27332                REPUBLIC BANK     6.0  3.473  -0.054     -0.081 0.639 TRUE    TRUE      5        8      109            1
- 34401          FORTIS PRIVATE BANK     1.3  1.244  -0.018     -0.087 0.559 TRUE    TRUE    108       87      207            4
- 34788       AMERICAN BUSINESS BANK     3.8  1.061  -0.004     -0.037 0.782 TRUE    TRUE    184      182       38            9
- 34836 NORTH AMERICAN BANKING COMPA     1.2  1.690  -0.009     -0.027 0.753 TRUE    TRUE     39      146       43            6
- 59017          FIRST REPUBLIC BANK   212.6  1.446  -0.037     -0.115 0.677 TRUE    TRUE     64       30       81            3
- 59105    WINTER PARK NATIONAL BANK     0.7  1.104  -0.006     -0.026 0.720 TRUE    TRUE    162      166       55            8
-  7072 THE FIRST NATIONAL BANK OF L     4.3  1.129  -0.011     -0.089 0.571 TRUE    TRUE    152      129      187            5
- 90290          UNIBANK FOR SAVINGS     2.5  1.757  -0.045     -0.131 0.596 TRUE    TRUE     34       13      152            2
-
-Backtest: top 15 by hidden loss / equity at 2022Q4:
-  CERT                         NAME ASSET_B hid/eq adjEq/A adjEqCal/A unins  flag flagCal rk_hid rk_adjEq rk_unins rk_inHiUnins
-  5673      CITIZENS BANK AND TRUST     1.3 15.110  -0.034     -0.064 0.295 FALSE   FALSE      1       33     1757           NA
- 20239 BANK OF CADIZ AND TRUST COMP     0.1 10.735  -0.013     -0.025 0.132 FALSE   FALSE      2      116     4012           NA
- 15326    THE UNION BANKING COMPANY     0.1 10.065  -0.010     -0.020 0.272 FALSE   FALSE      3      135     2084           NA
-  5018 CITIZENS NATIONAL BANK OF CH     0.5  8.606  -0.025     -0.047 0.296 FALSE   FALSE      4       59     1742           NA
- 27332                REPUBLIC BANK     6.0  3.473  -0.054     -0.081 0.639  TRUE    TRUE      5        8      109            1
- 13584         THE TAMPA STATE BANK     0.1  3.381  -0.016     -0.034 0.153 FALSE   FALSE      6       96     3780           NA
-  3079 THE FIRST NATIONAL BANK OF A     0.1  3.338  -0.008     -0.017 0.316 FALSE   FALSE      7      151     1508           NA
- 33497 CHARLES SCHWAB PREMIER BANK,    31.5  3.278  -0.023     -0.023 0.032 FALSE   FALSE      8       67     4631           NA
- 17975 THE COMMERCIAL BANK OF OZARK     0.1  2.827  -0.033     -0.074 0.204 FALSE   FALSE      9       39     3072           NA
- 16318              MARSEILLES BANK     0.1  2.757  -0.011     -0.025 0.129 FALSE   FALSE     10      130     4036           NA
-  9860          THE MARBLEHEAD BANK     0.1  2.576  -0.005     -0.011 0.188 FALSE   FALSE     11      178     3309           NA
- 11539 ENTERPRISE BANK OF SOUTH CAR     0.5  2.455  -0.023     -0.042 0.270 FALSE   FALSE     12       64     2130           NA
-  3336                  MENARD BANK     0.1  2.355  -0.003     -0.006 0.443 FALSE   FALSE     13      196      555           NA
- 28515         TRUSTTEXAS BANK, SSB     0.4  2.352  -0.030     -0.074 0.301 FALSE   FALSE     14       47     1675           NA
- 27201         COMMUNITY STATE BANK     0.1  2.332  -0.096     -0.096 0.196 FALSE   FALSE     15        1     3180           NA
-
-Backtest: among banks with uninsured share > 50%, lowest 15 adjusted equity / assets:
-  CERT                         NAME ASSET_B hid/eq adjEq/A adjEqCal/A unins  flag flagCal rk_hid rk_adjEq rk_unins rk_inHiUnins
- 27332                REPUBLIC BANK     6.0  3.473  -0.054     -0.081 0.639  TRUE    TRUE      5        8      109            1
- 90290          UNIBANK FOR SAVINGS     2.5  1.757  -0.045     -0.131 0.596  TRUE    TRUE     34       13      152            2
- 59017          FIRST REPUBLIC BANK   212.6  1.446  -0.037     -0.115 0.677  TRUE    TRUE     64       30       81            3
- 34401          FORTIS PRIVATE BANK     1.3  1.244  -0.018     -0.087 0.559  TRUE    TRUE    108       87      207            4
-  7072 THE FIRST NATIONAL BANK OF L     4.3  1.129  -0.011     -0.089 0.571  TRUE    TRUE    152      129      187            5
- 34836 NORTH AMERICAN BANKING COMPA     1.2  1.690  -0.009     -0.027 0.753  TRUE    TRUE     39      146       43            6
- 23474 THE AMERICAN NATIONAL BANK O     5.5  1.241  -0.007     -0.037 0.512  TRUE    TRUE    109      159      318            7
- 59105    WINTER PARK NATIONAL BANK     0.7  1.104  -0.006     -0.026 0.720  TRUE    TRUE    162      166       55            8
- 34788       AMERICAN BUSINESS BANK     3.8  1.061  -0.004     -0.037 0.782  TRUE    TRUE    184      182       38            9
- 18983              RIVER CITY BANK     4.0  1.010  -0.001     -0.073 0.592  TRUE    TRUE    218      211      157           10
- 24735          SILICON VALLEY BANK   209.0  0.992   0.001      0.000 0.939 FALSE    TRUE    228      230       11           11
- 58184    MERCHANTS COMMERCIAL BANK     0.6  0.000   0.002      0.002 0.536 FALSE   FALSE   4327      244      252           12
- 18895 FIRST NATIONAL BANK OF LAKE      0.2  0.224   0.003      0.003 0.587 FALSE   FALSE   2718      271      162           13
- 13951  COMMUNITY BANK OF LOUISIANA     0.8  0.883   0.004     -0.003 0.552 FALSE    TRUE    318      275      222           14
- 26312    FIRST AMERICAN TRUST, FSB     6.7  0.000   0.004      0.004 0.678 FALSE   FALSE   4327      285       80           15
+2023 failures at 20221231 (353 banks with >50% uninsured; pct_in_high = place among them):
+  CERT                     NAME hidden_B adjEq_A adjEqCal_A unins pct_worst  flag flagCal pct_in_high
+  8758            CITIZENS BANK     0.00  0.0184     0.0015  0.31    0.1093 FALSE   FALSE          NA
+ 24735      SILICON VALLEY BANK    15.33  0.0006    -0.0001  0.94    0.0528 FALSE    TRUE       0.031
+ 25851 HEARTLAND TRI-STATE BANK     0.00  0.0560     0.0536  0.28    0.4279 FALSE   FALSE          NA
+ 57053           SIGNATURE BANK     2.68  0.0483     0.0340  0.90    0.3474 FALSE   FALSE       0.263
+ 59017      FIRST REPUBLIC BANK    25.22 -0.0366    -0.1157  0.68    0.0074  TRUE    TRUE       0.008
