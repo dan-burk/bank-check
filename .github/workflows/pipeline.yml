@@ -1,14 +1,17 @@
 # Nightly data pipeline (pipeline/README.md). Pulls the last 10 quarters
-# for every bank from the FDIC API, logs any revisions against the stored
-# raw files, rebuilds the marts, tests them, and publishes:
-#   data-raw   release: one parquet per quarter + revisions.csv
-#   data-marts release: the marts the app reads
-# If the marts changed, it starts "Test and deploy" so both sites pick
+# for every bank from the FDIC API and the FRED rate series, logs any
+# revisions against the stored raw files, rebuilds the marts, tests them,
+# and publishes:
+#   data-raw   release: one parquet per quarter + revisions.csv, fred.*
+#   data-marts release: the marts the app reads, plus rates_monthly
+# If an app mart changed, it starts "Test and deploy" so both sites pick
 # them up. Most nights nothing changed and nothing deploys.
 #
-# Any failure (FDIC API down, a mart check or test trips) stops the job
-# before anything is uploaded, so the last good data stays live and GitHub
-# emails the repo owner. Run it by hand from the Actions tab; set
+# An FDIC failure (API down, a core mart check or test trips) stops the
+# job before anything is uploaded, so the last good data stays live and
+# GitHub emails the repo owner. A non-critical source (FRED) failing holds
+# back only its own files and marts: FDIC still publishes, and the job
+# still fails at the end so GitHub emails. Run it by hand from the Actions tab; set
 # "quarters" to 171 once for the 1984-to-now backfill
 # (docs/specs/industry-history.md).
 name: Data pipeline
@@ -82,20 +85,35 @@ jobs:
             if grep -qx manifest.csv <<< "$assets"; then
               gh release download data-raw --dir pipeline/out/raw --pattern 'manifest.csv'
             fi
+            # Other sources' last good raw (fred.*): diffed against, and
+            # used as is if that source fails tonight
+            if grep -q '^fred\.' <<< "$assets"; then
+              gh release download data-raw --dir pipeline/out/raw --pattern 'fred.*'
+            fi
           fi
           n=$(gh release view data-marts --json assets --jq '.assets | length')
           if [ "$n" -gt 0 ]; then
             gh release download data-marts --dir prev-marts
           fi
 
-      # The marker dates this run, so the upload sends only the quarters
-      # it pulled, not all ~170 stored files
+      # The marker dates this run, so the upload sends only the files it
+      # wrote, not all ~170 stored quarters. Exit status 2 means a
+      # non-critical source or mart failed but the FDIC marts are good:
+      # publish them, then fail the job at the end (last step).
       - name: Build raw and marts
         env:
           QUARTERS: ${{ inputs.quarters }}
         run: |
           touch pipeline/out/.run-start
+          set +e
           Rscript pipeline/build.R "${QUARTERS:-10}"
+          code=$?
+          set -e
+          if [ "$code" -eq 2 ]; then
+            echo "PARTIAL=1" >> "$GITHUB_ENV"
+          elif [ "$code" -ne 0 ]; then
+            exit "$code"
+          fi
 
       # Same tests the deploy runs, against the new marts. The integrity
       # test's live phase is skipped: the pipeline makes no extra API calls.
@@ -109,18 +127,27 @@ jobs:
 
       - name: Upload raw data
         run: |
-          mapfile -t files < <(find pipeline/out/raw -name 'risdate.*.parquet' -newer pipeline/out/.run-start)
+          # fred.* is rewritten only after a good pull, so a failed source
+          # uploads nothing and its last good files stay
+          mapfile -t files < <(find pipeline/out/raw \( -name 'risdate.*.parquet' -o -name 'fred.*' \) -newer pipeline/out/.run-start)
           files+=(pipeline/out/raw/manifest.csv)
           [ -f pipeline/out/revisions.csv ] && files+=(pipeline/out/revisions.csv)
           gh release upload data-raw "${files[@]}" --clobber
 
+      # A mart that was skipped or failed has no file here, so its
+      # published copy stays. NO_DEPLOY marts are published but the app
+      # does not read them yet, so they alone do not start a deploy.
       - name: Publish marts and deploy if they changed
+        env:
+          NO_DEPLOY: "rates_monthly.parquet"
         run: |
-          changed=0
+          changed=0; deploy=0
           for f in pipeline/out/marts/*.parquet; do
-            if ! cmp -s "$f" "prev-marts/$(basename "$f")"; then
-              echo "Changed: $(basename "$f")"
+            b=$(basename "$f")
+            if ! cmp -s "$f" "prev-marts/$b"; then
+              echo "Changed: $b"
               changed=1
+              if ! grep -qw "$b" <<< "$NO_DEPLOY"; then deploy=1; fi
             fi
           done
           if [ "$changed" -eq 0 ]; then
@@ -128,4 +155,14 @@ jobs:
             exit 0
           fi
           gh release upload data-marts pipeline/out/marts/*.parquet --clobber
-          gh workflow run deploy.yml --ref main
+          if [ "$deploy" -eq 1 ]; then
+            gh workflow run deploy.yml --ref main
+          else
+            echo "Only $NO_DEPLOY changed; no deploy."
+          fi
+
+      - name: Fail if a non-critical source or mart failed
+        if: env.PARTIAL == '1'
+        run: |
+          echo "::error::A non-critical source or mart failed (see 'Build raw and marts'). FDIC marts were published."
+          exit 1

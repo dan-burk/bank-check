@@ -60,3 +60,16 @@ pull_fdic <- function(quarters, seen) {
   }
   list(manifest = do.call(rbind, manifest), revisions = revisions)
 }
+
+# Critical: any error stops the run before anything is published. Returns
+# the merged raw manifest.
+SOURCE_FDIC <- list(
+  name = "fdic", critical = TRUE, cadence = "nightly", max_age_days = NA,
+  run = function(ctx) {
+    pulled <- pull_fdic(ctx$quarters, ctx$seen)
+    manifest <- save_manifest(pulled$manifest)
+    append_revisions(pulled$revisions)
+    manifest
+  },
+  last_pull = function() as.POSIXct(NA)
+)
