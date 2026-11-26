@@ -3,7 +3,8 @@
 A nightly job pulls every bank's quarterly filings from the FDIC API, stores
 them as one parquet file per quarter (**raw**), and builds small finished
 tables (**marts**) that the app reads. It also pulls the FDIC failures list
-(for the failures tab) and a few FRED rate series (for the research marts);
+(for the failures tab) and a few FRED rate series (for `hidden_loss` and
+other research marts);
 see [Sources](#sources). Single-bank histories are the one thing the app
 still fetches live from the FDIC API.
 
@@ -36,9 +37,10 @@ flowchart LR
 | Extract: FDIC quarters to pull, one quarter per request (paged) | `pipeline/sources/fdic.R` |
 | Extract: FRED series, pull check, diff, store | `pipeline/sources/fred.R` |
 | Extract: FDIC failures list, pull check, diff, store | `pipeline/sources/failures.R` |
-| Marts: `industry_quarterly` + `field_coverage`, `latest_snapshot`, `rates_monthly`, `fail_panel` + `failures_meta`, `research_field_coverage`, `bank_ids` | `pipeline/marts/industry.R`, `pipeline/marts/snapshot.R`, `pipeline/marts/rates.R`, `pipeline/marts/fail_panel.R`, `pipeline/marts/research_coverage.R`, `pipeline/marts/bank_ids.R` |
-| Mart checks, one file per mart (plus the `check()` helper) | `pipeline/checks/industry.R`, `pipeline/checks/snapshot.R`, `pipeline/checks/rates.R`, `pipeline/checks/fail_panel.R`, `pipeline/checks/research_coverage.R`, `pipeline/checks/bank_ids.R`, `pipeline/checks/check.R` |
-| Offline golden tests of the pure functions | `pipeline/tests/run.R` (CI: `.github/workflows/pipeline-test.yml`) |
+| Estimators: pure functions, data frames in and out (shared with research) | `pipeline/R/hidden_loss.R` |
+| Marts: `industry_quarterly` + `field_coverage`, `latest_snapshot`, `rates_monthly`, `fail_panel` + `failures_meta`, `research_field_coverage`, `bank_ids`, `hidden_loss` + `hidden_loss_history` | `pipeline/marts/industry.R`, `pipeline/marts/snapshot.R`, `pipeline/marts/rates.R`, `pipeline/marts/fail_panel.R`, `pipeline/marts/research_coverage.R`, `pipeline/marts/bank_ids.R`, `pipeline/marts/hidden_loss.R` |
+| Mart checks, one file per mart (plus the `check()` helper) | `pipeline/checks/industry.R`, `pipeline/checks/snapshot.R`, `pipeline/checks/rates.R`, `pipeline/checks/fail_panel.R`, `pipeline/checks/research_coverage.R`, `pipeline/checks/bank_ids.R`, `pipeline/checks/hidden_loss.R`, `pipeline/checks/check.R` |
+| Offline golden tests of the pure functions (fixtures cut from raw in `tests/fixtures/`) | `pipeline/tests/run.R` (CI: `.github/workflows/pipeline-test.yml`) |
 | Nightly run, upload, deploy trigger | `.github/workflows/pipeline.yml` |
 | Download marts before test and deploy | `.github/workflows/deploy.yml` |
 | App reads the marts | `app/R/data.R` (`load_snapshot`, `load_industry`, `load_fail_panel`, `load_fail_meta`) |
@@ -88,7 +90,9 @@ flowchart LR
    `revisions.csv` and the `fred.*` and `failures.*` files written this run to the
    `data-raw` release. If any mart changed (byte comparison with the
    published copy), upload the marts to `data-marts`, and start the deploy
-   if one the app reads changed (`rates_monthly` alone does not deploy).
+   if one the app reads changed. The marts the app does not read
+   (`NO_DEPLOY` in `pipeline.yml`: `rates_monthly`, `research_field_coverage`,
+   `bank_ids`, `hidden_loss`, `hidden_loss_history`) never start a deploy.
    Most nights nothing changed and nothing deploys.
 
 Steps 1 to 3 run for each source in the registry (`pipeline/R/sources.R`),
@@ -97,9 +101,9 @@ FDIC first. What a failure does depends on what failed:
 | What fails | What happens |
 |---|---|
 | FDIC request or check, or a core mart's check (`industry_quarterly`, `field_coverage`, `latest_snapshot`) | Run stops, nothing is published |
-| FRED request or pull check | FRED keeps its last good raw files (downloaded from the release). `rates_monthly` is rebuilt from them while they are under 10 days old, and skipped after that, so the published copy stays. FDIC publishes. `build.R` exits with status 2 and the job fails at the end, so GitHub emails |
+| FRED request or pull check | FRED keeps its last good raw files (downloaded from the release). `rates_monthly` and `hidden_loss` are rebuilt from them while they are under 10 days old, and skipped after that, so the published copies stay. FDIC publishes. `build.R` exits with status 2 and the job fails at the end, so GitHub emails |
 | Failures request or pull check | Same as FRED: the stored `failures.*` files stay, and `fail_panel` is rebuilt from them while they are under 35 days old (the old monthly refresh was never fresher), skipped after that |
-| `rates_monthly`, `fail_panel`, `research_field_coverage` or `bank_ids` check | That mart is not published (its old copy stays). For `fail_panel`, `failures_meta` is held back with it, so the pair always matches. The others publish. Job fails at the end |
+| `rates_monthly`, `fail_panel`, `research_field_coverage`, `bank_ids` or `hidden_loss` check | That mart is not published (its old copy stays). `failures_meta` is held back with `fail_panel`, and `hidden_loss_history` with `hidden_loss`, so each pair always matches. `hidden_loss` reads tonight's `rates_monthly`, so it fails when that did. The others publish. Job fails at the end |
 
 `fail_panel` is built on a non-critical source, so it is not a core mart:
 its failure never blocks `industry_quarterly` or `latest_snapshot`, and
@@ -114,11 +118,13 @@ is what the deploy ships.
 | `industry_quarterly` | quarter, every `STATEMENT_FIELDS` field summed (NA where `field_coverage` is below `COVERAGE_MIN`): the statement lines plus the numerators and denominators of the "All banks" chart lines | Industry tab: table and charts; industry lines on the metric charts |
 | `field_coverage` | quarter × statement field: banks reporting it and their share of assets | Audit of gaps; the checks in `pipeline/checks/` |
 | `latest_snapshot` | bank in the newest quarter, plus active banks that have not filed yet | Peer bands (banks that filed) and the bank picker (`active` banks) |
-| `rates_monthly` | FRED series × month: `avg`, `last`, `n_obs`, `n_missing` (blank days), `complete` (FALSE for the month to date), `method_break` | Input to the planned hidden-loss and HMDA marts. Not read by the app yet |
+| `rates_monthly` | FRED series × month: `avg`, `last`, `n_obs`, `n_missing` (blank days), `complete` (FALSE for the month to date), `method_break` | Input to `hidden_loss` and the planned HMDA mart. Not read by the app yet |
 | `fail_panel` | (CERT, quarter) for the 0-20 quarters before each failure: the `APP_FIELDS` columns from raw, plus `label`, `fail_date`, `qtrs_before` | Failures tab: trajectories and the failed-bank median |
 | `failures_meta` | failed bank: `label`, `NAME`, `CITY`, `PSTALP`, `fail_date`, `QBFASSET`, `region`, `size_bucket`, `n_filings` | Failures tab: the picker and its region and size filters |
 | `research_field_coverage` | quarter × `RESEARCH_FIELDS` field: `in_raw`, `n_reported`, `asset_share` (weighted as `field_coverage`) | Audit of the research inputs. Not read by the app |
 | `bank_ids` | CERT that ever filed: `NAMEFULL`, `first_risdate`, `last_risdate`, `RSSD`, `rssd_source`, `rssd_risdate`, `n_rssd`, `active` | The ID crosswalk other sources join through (HMDA LEIs come later). Not read by the app |
+| `hidden_loss` | (CERT, quarter), the newest 20 quarters, every filer: `loss_htm`, `loss_afs`, `loss_loans_res`, `loss_loans_oth`, `hidden_loss`, `adj_equity_to_assets`, `pct_worst`, `loan_yield`, `loan_yield_imputed`, `rate_gap`, `mtg_rate`, `bucket_cov`, `na_reason`, `method_version` | The planned "hidden loss" panel (about 2 MB). Not read by the app yet |
+| `hidden_loss_history` | (CERT, quarter) from 1997 Q2: the same, plus the inputs, the symmetric and calibrated variants, `cal_factor`, `uninsured_share` and the run-risk flags (about 870k rows, 46 MB) | Research and the backtest. Never shipped to the app |
 
 **Which failures.** `fail_panel` keeps `RESTYPE == "FAILURE"` with a
 failure year from 2000 (581 banks in 2026). `ASSISTANCE` rows are banks that got
@@ -169,6 +175,44 @@ placeholder and counts as none. Within a quarter RSSDs are unique, but a
 CERT can change RSSD over time, so a source dated in the past should join
 on that quarter's raw `RSSDID`. The check fails on an RSSD shared by two
 active CERTs, or under 99% of active filers having one.
+
+**`hidden_loss`.** What each bank's securities and loans would lose if
+marked to the quarter's rates, and how much of that reported equity does
+not show (method and findings: `research/unrealized-losses/README.md`).
+The estimator `hidden_loss(cur, prev, rates, params)` in
+`pipeline/R/hidden_loss.R` is pure, so research calls the same code. Its
+assumptions are one list, `HL_PARAMS`, and `method_version` records
+which ones a row used. It reads the raw quarters and tonight's
+`rates_monthly` (MORTGAGE30US and DGS10, each averaged over the quarter's last month). It runs on
+every raw quarter in which some bank reports the loan maturity buckets
+(1997 Q2 on, found from the data). Rules:
+
+- Missing is NA, never 0. A bank without the loan buckets or the HTM fair
+  value (the OTS thrifts before 2012) gets an NA loss, an NA `pct_worst`
+  and an `na_reason`, so it never ranks as the safest. The one fill is
+  the loan yield: missing or implausible (outside 1-15%) yields get the
+  quarter's median, flagged in `loan_yield_imputed`.
+- Every filer is a row. Zero or negative equity stays, because those are
+  the banks this is about. Insured branches of foreign banks (no equity)
+  have NA ratios, so the industry securities loss still sums to raw.
+- `pct_worst`, not ranks: the share of the quarter's banks with adjusted
+  equity / assets at or below the bank's. It shifts slightly while late
+  filers arrive, so expect small nightly changes for a few weeks after
+  each quarter.
+- `cal_factor` (history only) is NA when the industry has a net securities
+  gain or the factor is above 5. Low-rate quarters made it explode (×1,146
+  in 2008 Q4).
+- Uninsured share is `DEPUNINS / DEPDOM` everywhere (`uninsured_share()`).
+- Losses are rounded to whole $ thousands and ratios to 5 decimals, so
+  the files compress. Gzip, as for `fail_panel`.
+
+The check (`checks/hidden_loss.R`) fails the pair when quarters have gaps
+or the newest is missing, a filer is lost, the securities losses do not
+sum to the raw fair-value gaps (to the $1,000), a quarter in
+`HL_QBP_SEC_LOSS` is more than 2% off the FDIC Quarterly Banking Profile
+(add each new QBP figure there), more than 5% of banks get the median
+loan yield in the last 20 quarters, `cal_factor` is out of range, or an
+NA has no reason or a percentile.
 
 Planned: `peer_bands_quarterly` (historical peer bands).
 

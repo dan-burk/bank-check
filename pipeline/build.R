@@ -32,6 +32,9 @@
 #                                     tab (sources/failures.R, marts/fail_panel.R)
 #   marts/research_field_coverage.parquet, marts/bank_ids.parquet
 #                                     research inputs, not read by the app
+#   marts/hidden_loss.parquet, marts/hidden_loss_history.parquet
+#                                     hidden-loss estimate per bank and quarter
+#                                     (R/hidden_loss.R), not read by the app yet
 #
 # The work is in pipeline/R/ (transport, raw store, source registry), pipeline/sources/
 # (pulls), pipeline/marts/ (builders) and pipeline/checks/.
@@ -53,12 +56,13 @@ for (d in c(RAW, MARTS)) dir.create(d, recursive = TRUE, showWarnings = FALSE)
 source(file.path("app", "R", "api.R"))
 source(file.path("app", "R", "statements.R"))
 for (f in c("R/http.R", "R/store.R", "sources/fdic.R", "sources/fred.R",
-            "sources/failures.R", "R/sources.R",
+            "sources/failures.R", "R/sources.R", "R/hidden_loss.R",
             "marts/industry.R", "marts/snapshot.R", "marts/rates.R",
             "marts/fail_panel.R", "marts/research_coverage.R", "marts/bank_ids.R",
+            "marts/hidden_loss.R",
             "checks/check.R", "checks/snapshot.R", "checks/industry.R",
             "checks/rates.R", "checks/fail_panel.R", "checks/research_coverage.R",
-            "checks/bank_ids.R")) {
+            "checks/bank_ids.R", "checks/hidden_loss.R")) {
   source(file.path("pipeline", f))
 }
 
@@ -121,7 +125,7 @@ marts_ok <- c(
       cat(sprintf("Mart fail_panel: %d rows; failures_meta: %d failures, %d with filings.\n",
                   nrow(fp$panel), nrow(fp$meta), sum(fp$meta$n_filings > 0)))
     }),
-  # Research inputs, not read by the app (NO_DEPLOY in pipeline.yml)
+  # Not read by the app (NO_DEPLOY in pipeline.yml)
   research_field_coverage = build_optional_mart("research_field_coverage", "fdic", src,
     function(path) {
       rcov <- build_research_coverage(files)
@@ -133,7 +137,20 @@ marts_ok <- c(
     ids <- build_bank_ids(read_id_history(files), snap$CERT[snap$active])
     check_bank_ids(ids, newest, n_filed = sum(!is.na(snap$RISDATE)))
     write_parquet(ids, path)
-  })
+  }),
+  # Reads tonight's rates_monthly (built above, as c() runs in order): skipped
+  # when FRED is unusable, failed when rates_monthly failed
+  hidden_loss = build_optional_mart("hidden_loss", c("fdic", "fred"), src,
+    also = "hidden_loss_history", function(path) {
+      rates_path <- file.path(MARTS, "rates_monthly.parquet")
+      if (!file.exists(rates_path)) stop("rates_monthly was not built this run")
+      hl <- build_hidden_loss_history(files, as.data.frame(read_parquet(rates_path)))
+      report_hidden_loss(hl$history)
+      check_hidden_loss(hl$history, hl$audit, newest)
+      # gzip: 2.1 MB and 46 MB (zstd: 5.2 and 129, as for fail_panel)
+      write_parquet(hidden_loss_app(hl$history), path[["hidden_loss"]], compression = "gzip")
+      write_parquet(hl$history, path[["hidden_loss_history"]], compression = "gzip")
+    })
 )
 
 cat(sprintf("Done: %d requests, %.0f s. Raw %.1f MB across %d quarters.\n",

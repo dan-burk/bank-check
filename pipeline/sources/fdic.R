@@ -9,7 +9,8 @@ PAGE_SIZE     <- 10000L
 # whole per module, overlap with APP_FIELDS included, so each list can be
 # checked against its source file.
 RESEARCH_NEEDS <- list(
-  # research/unrealized-losses/estimator.R UL_FIELDS
+  # the research estimator's UL_FIELDS: a superset of HL_FIELDS
+  # (R/hidden_loss.R; tests/test_hidden_loss.R checks it stays one)
   hidden_loss = c(
     "CERT", "NAMEFULL", "STALP", "RISDATE", "ASSET", "EQTOT", "RBCT1J", "EQCCOMPI",
     "DEP", "DEPDOM", "DEPUNINS",

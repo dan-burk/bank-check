@@ -1,7 +1,7 @@
 # Spec: Fold the research prototypes into the data pipeline
 
-Status: PRs 1-4 implemented (see "PR order"); the rest is design. Inline
-"PR 3:" and "PR 4:" notes record where the code differs from this design.
+Status: PRs 1-5 implemented (see "PR order"); the rest is design. Inline
+"PR 3:", "PR 4:" and "PR 5:" notes record where the code differs from this design.
 
 ## Goal
 
@@ -206,6 +206,20 @@ or research.
 | `hidden_loss_history` | (CERT, quarter), 1997Q2 to now | same | nightly, published only if changed | research and backtest. Not shipped to the app (about 800k rows) |
 | `run_stress` | CERT, latest quarter | `hidden_loss` + FDIC raw | nightly | **app**: breaking point for an uninsured run and an all-deposit run, FHLB off and on, `how` ("below 2%" / "can't pay"), `min_ratio`, rank |
 | `hmda_book` | CERT (HMDA-reporting banks) | `hmda.groups` + `rates_monthly` + FDIC raw | nightly (book rate yearly, valuation nightly) | **app**: mortgage book rate (WAC), loss %, duration, HMDA share of the call-report book, `hmda_year_max` |
+
+PR 5: `hidden_loss` also has `na_reason`, and is cut from
+`hidden_loss_history` (one estimator run per quarter). Every filer is a
+row: banks with zero or negative equity, which the research dropped, are
+kept, and foreign-bank branches (no equity) have NA ratios. The history
+starts at the first quarter with loan buckets in raw (1997 Q2). Both are
+gzip with losses rounded to $1,000 and ratios to 5 decimals: `hidden_loss`
+is about 2 MB, over the 1 MB app target, so the app PR should trim
+quarters or columns. The `cal_factor` check is "NA or in (0, 5]": the
+estimator returns NA in the 77 of 118 quarters where the factor is
+negative (net securities gains) or above 5, so the nightly check does not
+fail on history. The QBP figures live in `HL_QBP_SEC_LOSS`
+(`checks/hidden_loss.R`). Research and the pipeline use the
+floored base variant (open question 2); the history keeps `_sym` and `_cal`.
 
 App-facing rules:
 

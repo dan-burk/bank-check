@@ -16,7 +16,7 @@ losses, not from rates.
 A bank that made a 30-year mortgage at 3% in 2021 still collects 3%. By late
 2022 new mortgages paid about 7%, so the old loan is worth less than its face
 value, while the books still show face value. That gap is a *hidden loss*.
-The estimator (`research/unrealized-losses/estimator.R`) adds two of them,
+The estimator (now `pipeline/R/hidden_loss.R`) adds two of them,
 for every bank and every quarter:
 
 1. **Bonds held to maturity**: the loss read straight off the Call Report
@@ -149,6 +149,12 @@ points:
   figures, not the originals.
 
 ## Files and how to run
+
+The estimator these scripts `source()` (`research/unrealized-losses/estimator.R`)
+moved into the pipeline as `pipeline/R/hidden_loss.R`, and its output is
+published nightly as the `hidden_loss_history` mart. Until this folder is
+re-pointed at that mart (spec `docs/specs/research-pipeline.md`, PR 7), run
+the scripts at commit `a4420c5`, the last commit that has the old estimator.
 
 From the repo root:
 ```sh

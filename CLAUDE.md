@@ -18,7 +18,7 @@ User docs are in `README.md`, and the pipeline design is in `pipeline/README.md`
 | `app/data/` | Shipped data: `fields_meta.csv`, `data-dictionary.md`. Mart `*.parquet` files (including `fail_panel`, `failures_meta`) are gitignored and downloaded |
 | `app/tests/smoke.R` | Deploy gate. Runs offline from the marts and `tests/fixtures/sd_banks.rds` (Dacotah, history from 1984, plus First B&T) |
 | `app/tests/integrity.R` | Recomputes chart values from the raw FDIC columns. Phase 2 hits the live API. `INTEGRITY_SKIP_LIVE=1` runs it offline |
-| `pipeline/build.R` | Nightly ETL entry point: pulls the last N quarters, writes the revisions log, builds the marts, runs the mart checks. The pieces: `R/` (throttled transport, raw store, source registry), `sources/` (`fdic.R`, `fred.R`, `failures.R`), `marts/`, `checks/`, `tests/` (offline, `pipeline-test.yml`) |
+| `pipeline/build.R` | Nightly ETL entry point: pulls the last N quarters, writes the revisions log, builds the marts, runs the mart checks. The pieces: `R/` (throttled transport, raw store, source registry, pure estimators), `sources/` (`fdic.R`, `fred.R`, `failures.R`), `marts/`, `checks/`, `tests/` (offline, `pipeline-test.yml`) |
 | `.github/workflows/pipeline.yml` | Nightly at 08:00 UTC, main only. Publishes the `data-raw` and `data-marts` releases and starts the deploy if the marts changed |
 | `.github/workflows/deploy.yml` | Smoke test, then deploys to both shinyapps.io and Pages. Runs on pushes to main that touch `app/**`, `pages/**`, `DESCRIPTION`. PRs run the test only |
 | `DESCRIPTION` | Not a package, just the dependency list that CI installs from a dated Posit snapshot |
@@ -35,7 +35,10 @@ quarter (paged past the 10k-row cap). It writes:
   raw file on hand), `latest_snapshot` (newest quarter plus the active
   directory), and `fail_panel` + `failures_meta` (the failures tab, cut
   from the raw quarters using the `failures.parquet` list pulled each
-  night). Stored in the `data-marts` release.
+  night). Plus marts the app does not read yet: `rates_monthly`,
+  `research_field_coverage`, `bank_ids`, and `hidden_loss` (last 20
+  quarters) with `hidden_loss_history` (1997 on), from the pure estimator
+  `pipeline/R/hidden_loss.R`. Stored in the `data-marts` release.
 
 Each deploy downloads the marts into `app/data/` and ships them inside the
 site. The app does no multi-bank fetching. A single bank's history is
