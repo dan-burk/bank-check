@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 env:
-  PKG_REPO: "https://packagemanager.posit.co/cran/__linux__/noble/2026-07-15"
+  PKG_REPO: "https://packagemanager.posit.co/cran/__linux__/noble/2026-09-17"   # same snapshot as deploy.yml
 
 jobs:
   test:
@@ -32,7 +32,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.R_LIBS_USER }}
-          key: rlib-test-noble-r451-snap20260715-${{ hashFiles('DESCRIPTION') }}
+          key: rlib-test-noble-r451-snap20260917-${{ hashFiles('DESCRIPTION') }}
 
       - name: Install pinned packages
         run: |
