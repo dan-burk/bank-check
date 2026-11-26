@@ -24,7 +24,8 @@ RESEARCH_NEEDS <- list(
     "SCNM3LES", "SCNM3T12", "SCNM1T3", "SCNM3T5", "SCNM5T15", "SCNMOV15",
     "SCPT3LES", "SCPT3T12", "SCPT1T3", "SCPT3T5", "SCPT5T15", "SCPTOV15",
     "SCO3YLES", "SCOOV3Y"),
-  # research/backtest/01_fetch.R: UL_FIELDS plus these
+  # research/backtest/analyze.R: the Tier 1 leverage baseline, and the
+  # quarter's RSSD for the BTFP match
   backtest = c("RBC1AAJ", "RSSDID"),
   # the old research/run-stress fetch and simulator fields: a superset of
   # RS_FIELDS beyond HL_FIELDS (R/run_stress.R; tests/test_run_stress.R checks it)

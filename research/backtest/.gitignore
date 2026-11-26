@@ -1,2 +1,2 @@
-# Downloaded FDIC/FRED/Fed data; rebuild with 01_fetch.R
-cache/
+# analyze.R's CSVs (chart.R reads three of them); rebuild with analyze.R
+out/

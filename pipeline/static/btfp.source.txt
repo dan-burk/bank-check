@@ -1,0 +1,9 @@
+url: https://www.federalreserve.gov/publications/files/section-11s-btfp-transaction-specific-disclosures-03-12-25.xlsx
+downloaded: 2026-11-26
+xlsx_sha256: 15588b715493654fcfce099979b90debbb70303752c9d5499da4028f1554ea82
+n_advances: 9812
+n_borrowers: 1806
+advances_total: 759593841.689
+advance_dates: 2023-03-13 to 2024-03-11
+units: advances in $ thousands; dates ISO
+csv_sha256: ff1bb11b6f0cc022bdef99ee457c75f2c9d80a1bbc1ffdf9ddcc4a6fb1e1c8c9
