@@ -4,7 +4,8 @@
 # the marts, tests them, and publishes:
 #   data-raw   release: one parquet per quarter + revisions.csv, fred.*, failures.*
 #   data-marts release: the marts the app reads (fail_panel and
-#              failures_meta included), plus rates_monthly
+#              failures_meta included), plus rates_monthly,
+#              research_field_coverage and bank_ids (not read by the app)
 # If an app mart changed, it starts "Test and deploy" so both sites pick
 # them up. Most nights nothing changed and nothing deploys.
 #
@@ -14,7 +15,9 @@
 # back only its own files and marts: FDIC still publishes, and the job
 # still fails at the end so GitHub emails. Run it by hand from the Actions tab; set
 # "quarters" to 171 once for the 1984-to-now backfill
-# (docs/specs/industry-history.md).
+# (docs/specs/industry-history.md), and once more after RESEARCH_FIELDS
+# widened the raw files (about 30 minutes; each stored quarter logs one
+# <schema> row in revisions.csv).
 name: Data pipeline
 
 on:
@@ -145,7 +148,7 @@ jobs:
       # does not read them yet, so they alone do not start a deploy.
       - name: Publish marts and deploy if they changed
         env:
-          NO_DEPLOY: "rates_monthly.parquet"
+          NO_DEPLOY: "rates_monthly.parquet research_field_coverage.parquet bank_ids.parquet"
         run: |
           changed=0; deploy=0
           for f in pipeline/out/marts/*.parquet; do

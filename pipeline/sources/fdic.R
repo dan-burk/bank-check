@@ -3,7 +3,39 @@
 
 HISTORY_START <- 19840331L   # first quarter in the FDIC API
 PAGE_SIZE     <- 10000L
-RAW_FIELDS    <- paste0(APP_FIELDS, ",CITY")
+
+# Call Report fields each research module reads, copied from its code
+# (docs/specs/research-pipeline.md, "The FDIC raw file gets wider"). Kept
+# whole per module, overlap with APP_FIELDS included, so each list can be
+# checked against its source file.
+RESEARCH_NEEDS <- list(
+  # research/unrealized-losses/estimator.R UL_FIELDS
+  hidden_loss = c(
+    "CERT", "NAMEFULL", "STALP", "RISDATE", "ASSET", "EQTOT", "RBCT1J", "EQCCOMPI",
+    "DEP", "DEPDOM", "DEPUNINS",
+    "SCAA", "SCAF", "SCHA", "SCHF", "SC", "ISCQ",
+    "LNLSGR", "LNRE", "LNRERES", "LNRENRES", "LNREMULT", "LNRECONS", "LNREAG",
+    "LNAG", "LNCI", "LNCON", "ILNLSQ", "ILNDOMQ", "ILNFORQ",
+    # loans by remaining maturity / repricing: 1-4 family first lien, other
+    "LNRS3LES", "LNRS3T12", "LNRS1T3", "LNRS3T5", "LNRS5T15", "LNRSOV15",
+    "LNOT3LES", "LNOT3T12", "LNOT1T3", "LNOT3T5", "LNOT5T15", "LNOTOV15",
+    # securities by remaining maturity / repricing, other MBS
+    "SCNM3LES", "SCNM3T12", "SCNM1T3", "SCNM3T5", "SCNM5T15", "SCNMOV15",
+    "SCPT3LES", "SCPT3T12", "SCPT1T3", "SCPT3T5", "SCPT5T15", "SCPTOV15",
+    "SCO3YLES", "SCOOV3Y"),
+  # research/backtest/01_fetch.R: UL_FIELDS plus these
+  backtest = c("RBC1AAJ", "RSSDID"),
+  # research/run-stress/01_fetch.R FIELDS and simulate.R SIM_FIELDS
+  run_stress = c("CHBAL", "FREPO", "TRADE", "INTAN", "LNLSNET", "OTHBFHLB",
+                 "DEPINS", "SCPLEDGE", "DEP", "DEPUNINS", "RBCT1J", "ASSET",
+                 "SCAA", "SCAF", "SCHA", "SCHF")
+)
+
+# What the research modules add to the app's fields. Stored in raw, but
+# no existing mart reads them (latest_snapshot drops them).
+RESEARCH_FIELDS <- setdiff(unique(unlist(RESEARCH_NEEDS)),
+                           c(strsplit(APP_FIELDS, ",")[[1]], "CITY"))
+RAW_FIELDS <- paste(c(APP_FIELDS, "CITY", RESEARCH_FIELDS), collapse = ",")
 
 # The quarters to pull, newest first: the last n, or the newest plus an
 # explicit sample (sample = integer vector, or NULL)

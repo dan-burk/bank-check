@@ -1,6 +1,7 @@
 # Spec: Fold the research prototypes into the data pipeline
 
-Status: design only. No pipeline code is written yet. Branch `feat/research-pipeline`.
+Status: PRs 1-4 implemented (see "PR order"); the rest is design. Inline
+"PR 3:" and "PR 4:" notes record where the code differs from this design.
 
 ## Goal
 
@@ -179,6 +180,17 @@ repeat. Instead:
   `research_field_coverage` table), so a misspelled field name shows up as
   0% coverage instead of a silent all-NA column.
 
+PR 4: `RESEARCH_FIELDS` lives in `sources/fdic.R` next to `RAW_FIELDS`
+(the FDIC source owns its field list), built from `RESEARCH_NEEDS`, one
+list per research module: 40 fields beyond `APP_FIELDS` + `CITY`. The API
+took all 129 in one request, so there is no split. The `<schema>` row is
+`field = "<schema>"`, `old` = columns dropped, `new` = columns added, so a
+dropped column is caught too. The API silently drops an unknown field
+name (it does not return an NA column), so the coverage mart has an
+`in_raw` flag and its check fails when a field is missing from the
+newest quarter. `research_field_coverage` and `bank_ids` are non-core
+(`build_optional_mart`): their checks hold back only themselves.
+
 ## Marts
 
 The marts the app could read are marked **app**. The rest feed other marts
@@ -189,7 +201,7 @@ or research.
 | `rates_monthly` | month × series: average, last value, number of observations | FRED | nightly | input to hidden_loss and hmda_book; **app** context line ("30y mortgage rate 6.9%") |
 | `failures` | failure event (CERT, FAILDATE, RESTYPE, RESTYPE1, QBFASSET, ...) | failures raw | nightly | `fail_panel`, backtest labels. PR 3: not a separate mart. The checked raw `failures.parquet` is this table (a typed copy would only duplicate it) |
 | `fail_panel`, `failures_meta` | (CERT, quarter) for the 0-20 quarters before failure | FDIC raw + `failures` | nightly, published only if changed | **app** failures tab. Replaces `build_fail_panel.R` and `refresh.yml`, with **no per-bank requests**, because the raw files already hold every bank since 1984 |
-| `bank_ids` | CERT: RSSD, LEI(s), (later) ticker, with the source of each link | FDIC institutions + HMDA panel | nightly | the one ID crosswalk every source joins through |
+| `bank_ids` | CERT: RSSD, LEI(s), (later) ticker, with the source of each link | FDIC institutions + HMDA panel | nightly | the one ID crosswalk every source joins through. PR 4 (FDIC part): RSSD comes from the call report's `RSSDID` in raw (every filer since 1984), not from `fdic.institutions.parquet`, so there is no new request or raw asset. Every CERT that ever filed, `active` from the snapshot directory |
 | `hidden_loss` | (CERT, quarter), last 20 quarters | FDIC raw + `rates_monthly` | nightly | **app**: "hidden loss", "equity after hidden losses / assets" and its percentile. Columns: `loss_htm`, `loss_afs`, `loss_loans_res`, `loss_loans_oth`, `hidden_loss`, `adj_equity_to_assets`, `pct_worst`, `loan_yield`, `loan_yield_imputed`, `rate_gap`, `mtg_rate`, `bucket_cov`, `method_version` |
 | `hidden_loss_history` | (CERT, quarter), 1997Q2 to now | same | nightly, published only if changed | research and backtest. Not shipped to the app (about 800k rows) |
 | `run_stress` | CERT, latest quarter | `hidden_loss` + FDIC raw | nightly | **app**: breaking point for an uninsured run and an all-deposit run, FHLB off and on, `how` ("below 2%" / "can't pay"), `min_ratio`, rank |

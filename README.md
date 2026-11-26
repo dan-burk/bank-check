@@ -75,7 +75,10 @@ Everything comes from `api.fdic.gov` (CORS-open, no auth). See
   and the bank picker), `industry_quarterly` (Industry tab), and
   `fail_panel` + `failures_meta` (failures tab: the 0-20 quarters before
   each post-2000 failure, cut from the stored quarters, so no per-bank
-  requests; a new failure appears the night after FDIC lists it). They live in
+  requests; a new failure appears the night after FDIC lists it). It also
+  stores the extra Call Report fields the research estimators need and
+  publishes two research-only marts the app does not read
+  (`research_field_coverage`, `bank_ids`). They live in
   the `data-marts` GitHub Release; each deploy downloads them into
   `app/data/`, so both sites carry their own copy. To run the app locally,
   download them first:
