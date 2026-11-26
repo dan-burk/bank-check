@@ -26,7 +26,8 @@ RESEARCH_NEEDS <- list(
     "SCO3YLES", "SCOOV3Y"),
   # research/backtest/01_fetch.R: UL_FIELDS plus these
   backtest = c("RBC1AAJ", "RSSDID"),
-  # research/run-stress/01_fetch.R FIELDS and simulate.R SIM_FIELDS
+  # the old research/run-stress fetch and simulator fields: a superset of
+  # RS_FIELDS beyond HL_FIELDS (R/run_stress.R; tests/test_run_stress.R checks it)
   run_stress = c("CHBAL", "FREPO", "TRADE", "INTAN", "LNLSNET", "OTHBFHLB",
                  "DEPINS", "SCPLEDGE", "DEP", "DEPUNINS", "RBCT1J", "ASSET",
                  "SCAA", "SCAF", "SCHA", "SCHF")

@@ -1,7 +1,7 @@
 Silicon Valley Bank, 2022Q4 call report, run = 40% of uninsured deposits
 ($ billions)
 Total assets                  209.0
-Deposits / uninsured          175.4 /    151.6
+Deposits / uninsured          175.4 /    151.6  (93.9% of domestic deposits)
 Tier 1 capital                 17.0   (8.13% of assets)
 Cash needed                    60.6
 Where the cash comes from:

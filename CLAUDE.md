@@ -38,7 +38,9 @@ quarter (paged past the 10k-row cap). It writes:
   night). Plus marts the app does not read yet: `rates_monthly`,
   `research_field_coverage`, `bank_ids`, and `hidden_loss` (last 20
   quarters) with `hidden_loss_history` (1997 on), from the pure estimator
-  `pipeline/R/hidden_loss.R`. Stored in the `data-marts` release.
+  `pipeline/R/hidden_loss.R`, and `run_stress` (deposit-run breaking point
+  per bank, newest quarter, from `pipeline/R/run_stress.R`). Stored in the
+  `data-marts` release.
 
 Each deploy downloads the marts into `app/data/` and ships them inside the
 site. The app does no multi-bank fetching. A single bank's history is
