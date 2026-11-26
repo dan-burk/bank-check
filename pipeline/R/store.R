@@ -18,8 +18,21 @@ raw_rds <- function(files) {
 # Every value that differs between the stored copy and the new pull, keyed by
 # CERT. Numbers compare with a small tolerance (JSON round-trips can wobble
 # in the last digit); NA vs a value counts as a change.
+#
+# A column only one side has is a schema change, not a revision: it is
+# logged as one row per quarter (CERT NA, field "<schema>", old = columns
+# dropped, new = columns added, comma-separated), and its values are not
+# compared. Without this, widening RAW_FIELDS would log every new value as
+# NA -> value (about 4,000 rows per column per quarter).
 diff_quarter <- function(old, new, rd, seen) {
   out <- list()
+  cols_dropped <- setdiff(names(old), names(new))
+  cols_added   <- setdiff(names(new), names(old))
+  if (length(cols_dropped) || length(cols_added)) {
+    out$schema <- data.frame(risdate = rd, CERT = NA_integer_, field = "<schema>",
+                             old = paste(cols_dropped, collapse = ","),
+                             new = paste(cols_added, collapse = ","))
+  }
   gone  <- setdiff(old$CERT, new$CERT)
   added <- setdiff(new$CERT, old$CERT)
   if (length(gone))  out$gone  <- data.frame(risdate = rd, CERT = gone,  field = "<bank>", old = "present", new = "absent")
@@ -27,9 +40,8 @@ diff_quarter <- function(old, new, rd, seen) {
   both <- intersect(old$CERT, new$CERT)
   o <- old[match(both, old$CERT), , drop = FALSE]
   n <- new[match(both, new$CERT), , drop = FALSE]
-  for (f in union(setdiff(names(o), "CERT"), setdiff(names(n), "CERT"))) {
-    a <- if (f %in% names(o)) o[[f]] else rep(NA, length(both))
-    b <- if (f %in% names(n)) n[[f]] else rep(NA, length(both))
+  for (f in setdiff(intersect(names(o), names(n)), "CERT")) {
+    a <- o[[f]]; b <- n[[f]]
     if (is.numeric(a) && is.numeric(b)) {
       same <- (is.na(a) & is.na(b)) |
               (!is.na(a) & !is.na(b) & abs(a - b) <= 1e-9 * pmax(1, abs(a)))

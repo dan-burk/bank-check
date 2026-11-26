@@ -4,9 +4,11 @@
 # CI: .github/workflows/pipeline-test.yml, on PRs touching pipeline/**.
 
 source(file.path("app", "R", "api.R"))
-for (f in c("R/http.R", "sources/fdic.R", "sources/fred.R", "sources/failures.R",
-            "R/sources.R", "marts/rates.R", "marts/fail_panel.R",
-            "checks/check.R", "checks/rates.R", "checks/fail_panel.R")) {
+for (f in c("R/http.R", "R/store.R", "sources/fdic.R", "sources/fred.R",
+            "sources/failures.R", "R/sources.R", "marts/rates.R", "marts/fail_panel.R",
+            "marts/research_coverage.R", "marts/bank_ids.R",
+            "checks/check.R", "checks/rates.R", "checks/fail_panel.R",
+            "checks/research_coverage.R", "checks/bank_ids.R")) {
   source(file.path("pipeline", f))
 }
 

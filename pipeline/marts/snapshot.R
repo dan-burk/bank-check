@@ -12,6 +12,7 @@ build_snapshot <- function(newest) {
     stop("Directory came back with ", if (is.null(dir_df)) 0 else nrow(dir_df), " banks")
   }
   snap <- as.data.frame(read_parquet(raw_path(newest)))
+  snap <- snap[setdiff(names(snap), RESEARCH_FIELDS)]   # the app's columns only
   snap$active <- snap$CERT %in% dir_df$CERT
   d <- dir_df[match(snap$CERT, dir_df$CERT), ]
   snap$NAME <- ifelse(is.na(d$NAME), snap$NAMEFULL, d$NAME)

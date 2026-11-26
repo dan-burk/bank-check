@@ -14,11 +14,13 @@
 #                                     # gaps are reported, not failed)
 #
 # Output (gitignored), under pipeline/out/:
-#   raw/risdate.YYYYMMDD.parquet   every bank, one quarter, APP_FIELDS + CITY
+#   raw/risdate.YYYYMMDD.parquet   every bank, one quarter, RAW_FIELDS
+#                                  (APP_FIELDS + CITY + RESEARCH_FIELDS)
 #   raw/manifest.csv               one row per quarter on hand (merged with
 #                                  the stored manifest by risdate)
 #   revisions.csv                  appended: every value FDIC changed since
-#                                  the last pull (quarter, CERT, field, old, new)
+#                                  the last pull (quarter, CERT, field, old, new),
+#                                  one "<schema>" row per quarter whose columns changed
 #   marts/industry_quarterly.parquet  statement lines summed, one row per quarter
 #   marts/latest_snapshot.parquet     newest quarter, one row per bank, plus
 #                                     the active directory (NAME, active flag)
@@ -28,6 +30,8 @@
 #   raw/failures.*, marts/fail_panel.parquet, marts/failures_meta.parquet
 #                                     failures list and the app's failures
 #                                     tab (sources/failures.R, marts/fail_panel.R)
+#   marts/research_field_coverage.parquet, marts/bank_ids.parquet
+#                                     research inputs, not read by the app
 #
 # The work is in pipeline/R/ (transport, raw store, source registry), pipeline/sources/
 # (pulls), pipeline/marts/ (builders) and pipeline/checks/.
@@ -51,9 +55,10 @@ source(file.path("app", "R", "statements.R"))
 for (f in c("R/http.R", "R/store.R", "sources/fdic.R", "sources/fred.R",
             "sources/failures.R", "R/sources.R",
             "marts/industry.R", "marts/snapshot.R", "marts/rates.R",
-            "marts/fail_panel.R",
+            "marts/fail_panel.R", "marts/research_coverage.R", "marts/bank_ids.R",
             "checks/check.R", "checks/snapshot.R", "checks/industry.R",
-            "checks/rates.R", "checks/fail_panel.R")) {
+            "checks/rates.R", "checks/fail_panel.R", "checks/research_coverage.R",
+            "checks/bank_ids.R")) {
   source(file.path("pipeline", f))
 }
 
@@ -115,7 +120,20 @@ marts_ok <- c(
       write_parquet(fp$meta,  path[["failures_meta"]])
       cat(sprintf("Mart fail_panel: %d rows; failures_meta: %d failures, %d with filings.\n",
                   nrow(fp$panel), nrow(fp$meta), sum(fp$meta$n_filings > 0)))
-    })
+    }),
+  # Research inputs, not read by the app (NO_DEPLOY in pipeline.yml)
+  research_field_coverage = build_optional_mart("research_field_coverage", "fdic", src,
+    function(path) {
+      rcov <- build_research_coverage(files)
+      report_research_coverage(rcov)
+      check_research_coverage(rcov, newest)
+      write_parquet(rcov, path)
+    }),
+  bank_ids = build_optional_mart("bank_ids", "fdic", src, function(path) {
+    ids <- build_bank_ids(read_id_history(files), snap$CERT[snap$active])
+    check_bank_ids(ids, newest, n_filed = sum(!is.na(snap$RISDATE)))
+    write_parquet(ids, path)
+  })
 )
 
 cat(sprintf("Done: %d requests, %.0f s. Raw %.1f MB across %d quarters.\n",
