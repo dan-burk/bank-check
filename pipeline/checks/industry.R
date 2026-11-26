@@ -40,13 +40,14 @@ IND_BOUNDS <- utils::read.table(header = TRUE, text = "
   LNREMULT             LNRE    0     100
 ", comment.char = "#")
 
-check_industry <- function(m, files, newest, manifest, n_filed, sample) {
-  ind <- m$ind; cov <- m$cov; raw_sums <- m$raw_sums
+HEAL_MAX <- 8L  # stale quarters build.R may re-pull in one run
 
-  # Cross-check 1: FDIC's own server-side sums over the same quarters, one
-  # request. Aggregate output gives RISDATE as epoch milliseconds.
+# The quarters whose raw sums disagree with FDIC's own server-side sums
+# (bank count and every summed field), one request. Aggregate output gives
+# RISDATE as epoch milliseconds.
+agg_mismatch <- function(raw_sums, newest) {
   agg <- flatten_body(fdic_query(FDIC_FINANCIALS_ENDPOINT, list(
-    filters = paste0("RISDATE:[", min(ind$RISDATE), " TO ", newest, "]"),
+    filters = paste0("RISDATE:[", min(raw_sums$RISDATE), " TO ", newest, "]"),
     agg_by = "RISDATE", agg_sum_fields = paste(AGG_FIELDS, collapse = ","),
     agg_limit = 1000, limit = 0)))
   agg$RISDATE <- as.integer(format(as.POSIXct(agg$RISDATE / 1000,
@@ -57,6 +58,32 @@ check_industry <- function(m, files, newest, manifest, n_filed, sample) {
     a <- agg[[paste0("sum_", k)]]; b <- raw_sums[[k]]
     agg_ok <- agg_ok & !is.na(a) & abs(a - b) <= 1e-9 * pmax(1, abs(b))
   }
+  raw_sums$RISDATE[!agg_ok]
+}
+
+# Stored quarters FDIC restated after we pulled them: they fail the
+# aggregate check but were not re-pulled this run. Returned only when every
+# failing quarter is one of these and there are at most HEAL_MAX, so
+# build.R can re-pull them. Otherwise (a pulled quarter disagrees, or too
+# many) returns none and check_industry() fails the run.
+stale_quarters <- function(raw_sums, pulled, newest) {
+  bad <- agg_mismatch(raw_sums, newest)
+  stale <- setdiff(bad, pulled)
+  if (!length(bad)) return(integer(0))
+  if (length(stale) < length(bad) || length(stale) > HEAL_MAX) {
+    cat("Not healing: aggregate mismatch in", length(bad), "quarters,",
+        length(bad) - length(stale), "of them pulled this run (max",
+        HEAL_MAX, "stale)\n")
+    return(integer(0))
+  }
+  stale
+}
+
+check_industry <- function(m, files, newest, manifest, n_filed, sample) {
+  ind <- m$ind; cov <- m$cov; raw_sums <- m$raw_sums
+
+  # Cross-check 1: FDIC's own server-side sums over the same quarters
+  agg_bad <- agg_mismatch(raw_sums, newest)
 
   # Cross-check 2: in Q1, the quarterly flow is the year to date (net
   # income, net charge-offs)
@@ -97,8 +124,8 @@ check_industry <- function(m, files, newest, manifest, n_filed, sample) {
   check(all(is.na(ind[cbind(match(lowc$RISDATE, ind$RISDATE),
                             match(lowc$field, names(ind)))])),
         "a mart value is summed over coverage below COVERAGE_MIN")
-  check(all(agg_ok), paste("FDIC aggregate sums disagree for",
-                           paste(raw_sums$RISDATE[!agg_ok], collapse = ",")))
+  check(length(agg_bad) == 0, paste("FDIC aggregate sums disagree for",
+                                    paste(agg_bad, collapse = ",")))
   check(!any(q1_bad %in% recent), "Q1 quarterly flow != year to date in the last 10 quarters")
   check(all(AGG_FIELDS %in% names(ind)), "industry_quarterly lacks a summed field")
   check(ind$RISDATE[1] == newest && ind$n_banks[1] == n_filed,

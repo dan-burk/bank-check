@@ -67,6 +67,16 @@ committed to git.
    catch unit or sum errors). The workflow then runs the app's smoke and integrity
    tests against them. Any failure stops the run: nothing is uploaded and
    the last good data stays live.
+
+   **Auto-heal.** FDIC occasionally accepts amended filings for quarters
+   older than the 10-quarter window, so a stored quarter stops matching
+   FDIC's aggregate. Before the checks, `stale_quarters()`
+   (`pipeline/checks/industry.R`) asks for the aggregate once. If every
+   quarter that disagrees is a stored one this run did not pull, and there
+   are at most `HEAL_MAX` (8), `build.R` re-pulls them, logs their revisions
+   and rebuilds the marts. The checks then run as usual. If a quarter
+   pulled this run disagrees, or more than 8 are stale, or a re-pulled
+   quarter still disagrees, the run fails as before.
 6. **Publish.** Upload the quarters pulled this run, `manifest.csv` and
    `revisions.csv` to the `data-raw` release. If any mart changed
    (byte comparison with the published copy), upload the marts to
@@ -124,8 +134,9 @@ Cloudflare R2. Only the download and upload commands change.
 
 Never loop over banks; loop over quarters. One request at a time, at least
 2 seconds apart. On failure, retry after 10 s, 30 s, then 90 s, then stop
-the run without publishing. A nightly run is 14 requests and takes about
-2 minutes.
+the run without publishing. A nightly run is 15 requests and takes about
+2 minutes, plus one request per restated quarter on the rare nights that
+auto-heal runs.
 
 ## Running it locally
 
