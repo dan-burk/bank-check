@@ -1,29 +1,31 @@
-# Run-stress step 3: one chart. Banks (top row) and their assets (bottom row)
-# that break (Tier 1 below 2% of assets, or can't pay) as the run grows,
-# 2022Q4 vs the latest quarter, FHLB backstop off (solid) and on (dashed).
-# Reads curves.csv from 02_run.R.
-# Run from the repo root:  Rscript research/run-stress/03_chart.R
+# Run stress: one chart. Banks (top row) and their assets (bottom row) that
+# break (Tier 1 below 2% of assets, or can't pay) as the run grows, 2022Q4
+# vs the latest quarter, FHLB backstop off (solid) and on (dashed).
+# Reads out/curves.csv and out/validation.csv from analyze.R.
+# Run from the repo root:  Rscript research/run-stress/chart.R
 
 library(ggplot2)
 DIR <- "research/run-stress"
-cv <- read.csv(file.path(DIR, "curves.csv"))
+cv <- read.csv(file.path(DIR, "out", "curves.csv"))
 latest <- max(cv$quarter)
 qlab <- function(q) sprintf("%sQ%d", substr(q, 1, 4), as.integer(substr(q, 5, 6)) / 3)
 cv$Quarter <- factor(qlab(cv$quarter), levels = qlab(c(20221231, latest)))
+cv$fhlb <- grepl("_fhlb$", cv$run)
 cv$Backstop <- factor(ifelse(cv$fhlb, "FHLB borrowing ON (up to 25% of assets)",
                              "FHLB borrowing OFF"),
                       levels = c("FHLB borrowing OFF", "FHLB borrowing ON (up to 25% of assets)"))
 RUNS <- c("Run on uninsured deposits", "Run on all deposits")
 WHAT <- c("banks that break", "their assets, $ billions")
-cv$panel_col <- factor(ifelse(cv$run_on == "unins", RUNS[1], RUNS[2]), levels = RUNS)
+cv$panel_col <- factor(ifelse(grepl("^unins", cv$run), RUNS[1], RUNS[2]), levels = RUNS)
 long <- rbind(
   data.frame(cv[c("s", "Quarter", "Backstop", "panel_col")], what = WHAT[1], y = cv$breaks),
   data.frame(cv[c("s", "Quarter", "Backstop", "panel_col")], what = WHAT[2], y = cv$assets_break_bn))
 long$what <- factor(long$what, levels = WHAT)
 
 # Mark where SVB / First Republic break in 2022Q4 (uninsured run, FHLB off)
-v <- read.csv(file.path(DIR, "validation.csv"))
-v <- v[v$check == "last public quarter" & v$quarter == 20221231 & !is.na(v$bp_unins), ]
+v <- read.csv(file.path(DIR, "out", "validation.csv"))
+v <- v[v$check == "last public quarter" & v$quarter == 20221231 & !is.na(v$bp_unins) &
+         v$CERT %in% c(24735, 59017), ]
 v$lab <- c("24735" = "SVB", "59017" = "First Republic")[as.character(v$CERT)]
 ann <- data.frame(s = v$bp_unins, lab = paste(v$lab, "breaks"),
                   panel_col = factor(levels(long$panel_col)[1], levels = levels(long$panel_col)),

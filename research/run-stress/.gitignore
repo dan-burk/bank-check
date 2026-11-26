@@ -1,2 +1,2 @@
-# Downloaded FDIC data; rebuild with 01_fetch.R
-cache/
+# analyze.R's CSVs for chart.R; rebuild with analyze.R
+out/

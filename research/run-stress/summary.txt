@@ -1,265 +1,150 @@
-Run-stress simulator. Latest quarter: 20260930 
+Run-stress simulator (rs-1). Latest quarter: 20260930 (4284 filers; 4196 ranked in the uninsured run)
+Not run or not ranked, latest quarter:
+  no deposits x60
+  no loans or securities: not ranked x11
+  no Tier 1 capital; no deposits; no loan loss estimate; no FHLB advances reported (FHLB-on runs) x1
+  no Tier 1 capital; no loan loss estimate; no FHLB advances reported (FHLB-on runs) x16
+Failures since 2022 and the quarter used: 24735 20221231, 57053 20221231, 59017 20221231, 25851 20230331, 8758 20230630, 27332 20231231, 4134 20240630, 28611 20240930, 5520 20250331, 57488 20250930, 25796 20251231, 28722 20260331, 25744 20260331
 
 == Banks that break (below 2% or can't pay) by run size ==
-  quarter run_on  fhlb    s banks breaks below_2pct cant_pay below_4pct
- 20221231  unins FALSE 0.05  4683      0          0        0          1
- 20221231  unins FALSE 0.10  4683      0          0        0          0
- 20221231  unins FALSE 0.20  4683      0          0        0          1
- 20221231  unins FALSE 0.30  4683      0          0        0          1
- 20221231  unins FALSE 0.50  4683      1          1        0          1
- 20221231  unins  TRUE 0.05  4683      0          0        0          1
- 20221231  unins  TRUE 0.10  4683      0          0        0          0
- 20221231  unins  TRUE 0.20  4683      0          0        0          0
- 20221231  unins  TRUE 0.30  4683      0          0        0          0
- 20221231  unins  TRUE 0.50  4683      0          0        0          1
- 20221231    all FALSE 0.05  4683      0          0        0          0
- 20221231    all FALSE 0.10  4683      0          0        0          0
- 20221231    all FALSE 0.20  4683      0          0        0          4
- 20221231    all FALSE 0.30  4683      3          3        0         12
- 20221231    all FALSE 0.50  4683     38         37        1         94
- 20221231    all  TRUE 0.05  4683      0          0        0          0
- 20221231    all  TRUE 0.10  4683      0          0        0          0
- 20221231    all  TRUE 0.20  4683      0          0        0          0
- 20221231    all  TRUE 0.30  4683      0          0        0          1
- 20221231    all  TRUE 0.50  4683      3          3        0         10
- 20260930  unins FALSE 0.05  4203      0          0        0          4
- 20260930  unins FALSE 0.10  4203      0          0        0          3
- 20260930  unins FALSE 0.20  4203      0          0        0          3
- 20260930  unins FALSE 0.30  4203      0          0        0          3
- 20260930  unins FALSE 0.50  4203      1          0        1          3
- 20260930  unins  TRUE 0.05  4203      0          0        0          4
- 20260930  unins  TRUE 0.10  4203      0          0        0          3
- 20260930  unins  TRUE 0.20  4203      0          0        0          3
- 20260930  unins  TRUE 0.30  4203      0          0        0          3
- 20260930  unins  TRUE 0.50  4203      0          0        0          3
- 20260930    all FALSE 0.05  4203      0          0        0          3
- 20260930    all FALSE 0.10  4203      0          0        0          3
- 20260930    all FALSE 0.20  4203      2          1        1          3
- 20260930    all FALSE 0.30  4203      3          2        1          6
- 20260930    all FALSE 0.50  4203     12         11        1         23
- 20260930    all  TRUE 0.05  4203      0          0        0          3
- 20260930    all  TRUE 0.10  4203      0          0        0          3
- 20260930    all  TRUE 0.20  4203      0          0        0          3
- 20260930    all  TRUE 0.30  4203      0          0        0          3
- 20260930    all  TRUE 0.50  4203      1          1        0          5
- assets_break_bn
-             0.0
-             0.0
-             0.0
-             0.0
-             6.0
-             0.0
-             0.0
-             0.0
-             0.0
-             0.0
-             0.0
-             0.0
-             0.0
-             7.1
-            52.9
-             0.0
-             0.0
-             0.0
-             0.0
-             7.1
-             0.0
-             0.0
-             0.0
-             0.0
-             0.1
-             0.0
-             0.0
-             0.0
-             0.0
-             0.0
-             0.0
-             0.0
-             0.1
-             0.2
-             8.4
-             0.0
-             0.0
-             0.0
-             0.0
-             0.1
+  quarter        run    s banks breaks below_2pct cant_pay below_4pct assets_break_bn
+ 20221231      unins 0.05  4704      0          0        0          1             0.0
+ 20221231      unins 0.10  4704      0          0        0          0             0.0
+ 20221231      unins 0.20  4704      0          0        0          1             0.0
+ 20221231      unins 0.30  4704      0          0        0          1             0.0
+ 20221231      unins 0.50  4704      1          1        0          1             6.0
+ 20221231 unins_fhlb 0.05  4704      0          0        0          1             0.0
+ 20221231 unins_fhlb 0.10  4704      0          0        0          0             0.0
+ 20221231 unins_fhlb 0.20  4704      0          0        0          0             0.0
+ 20221231 unins_fhlb 0.30  4704      0          0        0          0             0.0
+ 20221231 unins_fhlb 0.50  4704      0          0        0          1             0.0
+ 20221231        all 0.05  4704      0          0        0          0             0.0
+ 20221231        all 0.10  4704      0          0        0          0             0.0
+ 20221231        all 0.20  4704      0          0        0          5             0.0
+ 20221231        all 0.30  4704      4          4        0         14             7.7
+ 20221231        all 0.50  4704     46         45        1        107            57.3
+ 20221231   all_fhlb 0.05  4704      0          0        0          0             0.0
+ 20221231   all_fhlb 0.10  4704      0          0        0          0             0.0
+ 20221231   all_fhlb 0.20  4704      0          0        0          0             0.0
+ 20221231   all_fhlb 0.30  4704      0          0        0          1             0.0
+ 20221231   all_fhlb 0.50  4704      4          4        0         11             7.7
+ 20260930      unins 0.05  4207      0          0        0          4             0.0
+ 20260930      unins 0.10  4207      0          0        0          3             0.0
+ 20260930      unins 0.20  4207      0          0        0          3             0.0
+ 20260930      unins 0.30  4207      0          0        0          3             0.0
+ 20260930      unins 0.50  4207      1          0        1          3             0.1
+ 20260930 unins_fhlb 0.05  4207      0          0        0          4             0.0
+ 20260930 unins_fhlb 0.10  4207      0          0        0          3             0.0
+ 20260930 unins_fhlb 0.20  4207      0          0        0          3             0.0
+ 20260930 unins_fhlb 0.30  4207      0          0        0          3             0.0
+ 20260930 unins_fhlb 0.50  4207      0          0        0          3             0.0
+ 20260930        all 0.05  4207      0          0        0          3             0.0
+ 20260930        all 0.10  4207      0          0        0          3             0.0
+ 20260930        all 0.20  4207      2          1        1          3             0.1
+ 20260930        all 0.30  4207      3          2        1          7             0.2
+ 20260930        all 0.50  4207     14         13        1         25            10.5
+ 20260930   all_fhlb 0.05  4207      0          0        0          3             0.0
+ 20260930   all_fhlb 0.10  4207      0          0        0          3             0.0
+ 20260930   all_fhlb 0.20  4207      0          0        0          3             0.0
+ 20260930   all_fhlb 0.30  4207      0          0        0          3             0.0
+ 20260930   all_fhlb 0.50  4207      1          1        0          6             0.1
 
 == Breaking point distribution, latest quarter ==
 unins       broke at <=100%:    2 banks; at <=50%:    1; <=20%:    0
 unins_fhlb  broke at <=100%:    0 banks; at <=50%:    0; <=20%:    0
-all         broke at <=100%:  139 banks; at <=50%:   12; <=20%:    2
-all_fhlb    broke at <=100%:   26 banks; at <=50%:    1; <=20%:    0
+all         broke at <=100%:  143 banks; at <=50%:   14; <=20%:    2
+all_fhlb    broke at <=100%:   30 banks; at <=50%:    1; <=20%:    0
 
 == Top 20 most fragile, latest quarter (uninsured run first, then all-deposit run) ==
- fragile_rank                               name state assets_bn unins_share
-            1 FIDELITY PERSONAL TRUST COMPANY, F    NH      0.08       0.576
-            2      INDEPENDENCE BANK OF KENTUCKY    KY      3.95       0.398
-            3             CONNECT COMMUNITY BANK    WA      0.07       0.030
-            4               COMMUNITY STATE BANK    OK      0.09       0.186
-            5               TRUSTTEXAS BANK, SSB    TX      0.38       0.261
-            6            LAMONT BANK OF ST. JOHN    WA      0.05       0.087
-            7               FIRST FINANCIAL BANK    AL      0.25       0.227
-            8                    CB&S BANK, INC.    AL      3.06       0.316
-            9    NORTHERN INTERSTATE BANK, N. A.    MI      0.19       0.260
-           10                       BANK OF VICI    OK      0.03       0.130
-           11                       MISSION BANK    AZ      0.18       0.214
-           12               COMPASS SAVINGS BANK    PA      0.05       0.034
-           13            THE BANK OF GLEN BURNIE    MD      0.40       0.037
-           14 FIRST STATE BANK OF RANDOLPH COUNT    GA      0.08       0.143
-           15     THE BANK OF LAFAYETTE, GEORGIA    GA      0.44       0.339
-           16 MIDLAND FEDERAL SAVINGS AND LOAN A    IL      0.11       0.050
-           17                       TRUSTCO BANK    NY      6.49       0.224
-           18             FIRST MUTUAL BANK, FSB    OH      0.11       0.124
-           19 THE GLEN BURNIE MUTUAL SAVINGS BAN    MD      0.10       0.088
-           20 FIRST & PEOPLES BANK AND TRUST COM    KY      0.20       0.133
- tier1_lev bp_unins how_unins bp_unins_fhlb bp_all bp_all_fhlb rank_tier1
-    0.9954     0.33 can't pay            NA  0.190          NA       4201
-    0.0926     0.92  below 2%            NA  0.370       0.545        640
-    0.0307       NA      <NA>            NA  0.150       0.410          2
-    0.0759       NA      <NA>            NA  0.285       0.560         63
-    0.0815       NA      <NA>            NA  0.310       0.565        139
-    0.0332       NA      <NA>            NA  0.330       0.585          3
-    0.1070       NA      <NA>            NA  0.345       0.600       1811
-    0.1034       NA      <NA>            NA  0.350       0.570       1520
-    0.0936       NA      <NA>            NA  0.390       0.615        742
-    0.0559       NA      <NA>            NA  0.445       0.695          6
-    0.0948       NA      <NA>            NA  0.480       0.750        824
-    0.0718       NA      <NA>            NA  0.500       0.720         36
-    0.0854       NA      <NA>            NA  0.510       0.745        262
-    0.0877       NA      <NA>            NA  0.540       0.795        364
-    0.0963       NA      <NA>            NA  0.565       0.740        925
-    0.0809       NA      <NA>            NA  0.580       0.850        126
-    0.0860       NA      <NA>            NA  0.605       0.890        284
-    0.0971       NA      <NA>            NA  0.615       0.825        987
-    0.0890       NA      <NA>            NA  0.630       0.905        417
-    0.0898       NA      <NA>            NA  0.630       0.895        448
+                               name assets_bn unins_share tier1_lev bp_unins how_unins bp_unins_fhlb bp_all bp_all_fhlb rank_tier1
+      INDEPENDENCE BANK OF KENTUCKY      3.95       0.398    0.0926     0.92  below 2%            NA  0.370       0.545        642
+             CONNECT COMMUNITY BANK      0.07       0.030    0.0307       NA     never            NA  0.150       0.410          2
+               COMMUNITY STATE BANK      0.09       0.186    0.0759       NA     never            NA  0.285       0.560         63
+               TRUSTTEXAS BANK, SSB      0.38       0.261    0.0815       NA     never            NA  0.310       0.565        140
+          MAUCH CHUNK TRUST COMPANY      0.66       0.255    0.0788       NA     never            NA  0.330       0.525         93
+            LAMONT BANK OF ST. JOHN      0.05       0.087    0.0332       NA     never            NA  0.330       0.585          3
+               FIRST FINANCIAL BANK      0.25       0.227    0.1070       NA     never            NA  0.345       0.600       1810
+                    CB&S BANK, INC.      3.06       0.316    0.1034       NA     never            NA  0.350       0.570       1520
+          UNION COUNTY SAVINGS BANK      1.41       0.160    0.0727       NA     never            NA  0.390       0.655         42
+    NORTHERN INTERSTATE BANK, N. A.      0.19       0.260    0.0936       NA     never            NA  0.390       0.615        738
+                       BANK OF VICI      0.03       0.130    0.0559       NA     never            NA  0.445       0.695          6
+                       MISSION BANK      0.18       0.214    0.0948       NA     never            NA  0.480       0.750        826
+               COMPASS SAVINGS BANK      0.05       0.034    0.0718       NA     never            NA  0.500       0.720         36
+            THE BANK OF GLEN BURNIE      0.40       0.037    0.0854       NA     never            NA  0.510       0.745        260
+ FIRST STATE BANK OF RANDOLPH COUNT      0.08       0.143    0.0877       NA     never            NA  0.540       0.795        364
+     THE BANK OF LAFAYETTE, GEORGIA      0.44       0.339    0.0963       NA     never            NA  0.565       0.740        927
+                 PHENIX-GIRARD BANK      0.32       0.519    0.1211       NA     never            NA  0.575       0.830       2724
+ MIDLAND FEDERAL SAVINGS AND LOAN A      0.11       0.050    0.0809       NA     never            NA  0.580       0.850        128
+                       TRUSTCO BANK      6.49       0.224    0.0860       NA     never            NA  0.605       0.890        286
+             FIRST MUTUAL BANK, FSB      0.11       0.124    0.0971       NA     never            NA  0.615       0.825        989
 
-== Top 10 by breaking point, 2022Q4 (uninsured run, FHLB off) ==
- rank_unins                               name state assets_bn unins_share
-          1                      REPUBLIC BANK    PA      5.97   0.6391871
-          2                SILICON VALLEY BANK    CA    209.03   0.8643730
-          3     NORTH AMERICAN BANKING COMPANY    MN      1.22   0.7531653
-          4 FIDELITY PERSONAL TRUST COMPANY, F    NH      0.07   0.5100000
-          5                FIRST REPUBLIC BANK    CA    212.64   0.6771310
-          6                UNIBANK FOR SAVINGS    MA      2.50   0.5957177
-          7             AMERICAN BUSINESS BANK    CA      3.84   0.7823097
-          8 THE AMERICAN NATIONAL BANK OF TEXA    TX      5.54   0.5118931
-          9          FIRST AMERICAN TRUST, FSB    CA      6.69   0.6781153
-         10                      BANK OF LABOR    KS      0.89   0.4406808
-  tier1_lev bp_unins how_unins bp_all rank_tier1
- 0.05271861    0.380  below 2%  0.245          6
- 0.07962574    0.650  below 2%  0.560        278
- 0.07261375    0.730  below 2%  0.550         93
- 0.97782079    0.735 can't pay  0.375       4680
- 0.08505324    0.850  below 2%  0.580        596
- 0.08184498    0.910  below 2%  0.540        399
- 0.08556590    0.915  below 2%  0.715        633
- 0.08133743    0.975  below 2%  0.500        371
- 0.07428286    0.995  below 2%  0.675        127
- 0.07177166    0.995  below 2%  0.440         84
+== Top 10 by breaking point, 20221231 (uninsured run, FHLB off; 4692 ranked) ==
+ rank_unins                               name assets_bn unins_share tier1_lev bp_unins how_unins bp_all rank_tier1
+          1                      REPUBLIC BANK      5.97       0.639    0.0527    0.380  below 2%  0.245          6
+          2                SILICON VALLEY BANK    209.03       0.939    0.0796    0.650  below 2%  0.560        281
+          3     NORTH AMERICAN BANKING COMPANY      1.22       0.753    0.0726    0.730  below 2%  0.550         93
+          4                FIRST REPUBLIC BANK    212.64       0.677    0.0851    0.850  below 2%  0.580        603
+          5                UNIBANK FOR SAVINGS      2.50       0.596    0.0818    0.910  below 2%  0.540        398
+          6             AMERICAN BUSINESS BANK      3.84       0.782    0.0856    0.915  below 2%  0.715        638
+          7     THE BANK OF LAFAYETTE, GEORGIA      0.39       0.445    0.0880    0.935  below 2%  0.420        848
+          8 THE AMERICAN NATIONAL BANK OF TEXA      5.54       0.512    0.0813    0.975  below 2%  0.500        373
+          9          FIRST AMERICAN TRUST, FSB      6.69       0.678    0.0743    0.995  below 2%  0.675        128
+         10                      BANK OF LABOR      0.89       0.441    0.0718    0.995  below 2%  0.440         85
 
 == Validation ==
-               check  quarter                       name    group bp_unins
-    quarter 20211231 20211231 THE FIRST NATIONAL BANK OF    fraud       NA
-    quarter 20211231 20211231 THE SANTA ANNA NATIONAL BA    fraud       NA
-    quarter 20211231 20211231              CITIZENS BANK   credit       NA
-    quarter 20211231 20211231        SILICON VALLEY BANK rate+run       NA
-    quarter 20211231 20211231        SMALL BUSINESS BANK   credit       NA
-    quarter 20211231 20211231 COMMUNITY BANK AND TRUST -   credit       NA
-    quarter 20211231 20211231   HEARTLAND TRI-STATE BANK    fraud       NA
-    quarter 20211231 20211231              REPUBLIC BANK rate+run       NA
-    quarter 20211231 20211231       PULASKI SAVINGS BANK    fraud       NA
-    quarter 20211231 20211231 KENTLAND FEDERAL SAVINGS A   credit       NA
-    quarter 20211231 20211231             SIGNATURE BANK rate+run       NA
-    quarter 20211231 20211231 METROPOLITAN CAPITAL BANK    credit       NA
-    quarter 20211231 20211231        FIRST REPUBLIC BANK rate+run       NA
-    quarter 20221231 20221231 THE FIRST NATIONAL BANK OF    fraud       NA
-    quarter 20221231 20221231 THE SANTA ANNA NATIONAL BA    fraud       NA
-    quarter 20221231 20221231              CITIZENS BANK   credit       NA
-    quarter 20221231 20221231        SILICON VALLEY BANK rate+run     0.65
-    quarter 20221231 20221231        SMALL BUSINESS BANK   credit       NA
-    quarter 20221231 20221231 COMMUNITY BANK AND TRUST -   credit       NA
-    quarter 20221231 20221231   HEARTLAND TRI-STATE BANK    fraud       NA
-    quarter 20221231 20221231              REPUBLIC BANK rate+run     0.38
-    quarter 20221231 20221231       PULASKI SAVINGS BANK    fraud       NA
-    quarter 20221231 20221231 KENTLAND FEDERAL SAVINGS A   credit       NA
-    quarter 20221231 20221231             SIGNATURE BANK rate+run       NA
-    quarter 20221231 20221231 METROPOLITAN CAPITAL BANK    credit       NA
-    quarter 20221231 20221231        FIRST REPUBLIC BANK rate+run     0.85
-    quarter 20231231 20231231 THE FIRST NATIONAL BANK OF    fraud       NA
-    quarter 20231231 20231231 THE SANTA ANNA NATIONAL BA    fraud       NA
-    quarter 20231231 20231231        SMALL BUSINESS BANK   credit       NA
-    quarter 20231231 20231231 COMMUNITY BANK AND TRUST -   credit       NA
-    quarter 20231231 20231231              REPUBLIC BANK rate+run     0.47
-    quarter 20231231 20231231       PULASKI SAVINGS BANK    fraud       NA
-    quarter 20231231 20231231 KENTLAND FEDERAL SAVINGS A   credit       NA
-    quarter 20231231 20231231 METROPOLITAN CAPITAL BANK    credit       NA
- last public quarter 20221231        SILICON VALLEY BANK rate+run     0.65
- last public quarter 20221231             SIGNATURE BANK rate+run       NA
- last public quarter 20221231        FIRST REPUBLIC BANK rate+run     0.85
- last public quarter 20230331   HEARTLAND TRI-STATE BANK    fraud       NA
- last public quarter 20230630              CITIZENS BANK   credit       NA
- last public quarter 20231231              REPUBLIC BANK rate+run     0.47
- last public quarter 20240630 THE FIRST NATIONAL BANK OF    fraud       NA
- last public quarter 20240930       PULASKI SAVINGS BANK    fraud       NA
- last public quarter 20250331 THE SANTA ANNA NATIONAL BA    fraud       NA
- last public quarter 20250930 METROPOLITAN CAPITAL BANK    credit       NA
- last public quarter 20251231 COMMUNITY BANK AND TRUST -   credit       NA
- last public quarter 20260331 KENTLAND FEDERAL SAVINGS A   credit     0.00
- last public quarter 20260331        SMALL BUSINESS BANK   credit       NA
- rank_unins rank_unins_fhlb bp_all rank_all rank_tier1    n
-       3472            3471     NA     3476       3351 4838
-       2265            2264     NA     2276       2300 4838
-        453             451     NA      470        312 4838
-        132             130     NA      152        145 4838
-       4037            4036     NA     4039       4088 4838
-          4               2  0.955        7          1 4838
-       1509            1507     NA     1522       1806 4838
-         19              17     NA       40         13 4838
-       1603            1601     NA     1616       1512 4838
-       4464            4463     NA     4465       4450 4838
-        109             107     NA      129        159 4838
-       1508            1506     NA     1521       1723 4838
-       1241            1239     NA     1255       1192 4838
-       3439            3410     NA     3515       3614 4683
-       2511            2545     NA     2502       2596 4683
-        159             489     NA      801        324 4683
-          2               2  0.560       60        278 4683
-       2692            2597  0.855      217       2245 4683
-       1157             859  0.965      333       1199 4683
-       1627            1391  0.995      598       1886 4683
-          1               1  0.245        2          6 4683
-       2359            2213  1.000      625       2267 4683
-       3851            3840     NA     3896       3809 4683
-       1041             739     NA     1488        831 4683
-        413            2930     NA      790       2678 4683
-          5               8  0.580       69        596 4683
-       2653            2606     NA     2737       2400 4571
-       2141            2193     NA     2141       2148 4571
-        127              55  0.785       99         31 4571
-         78              25  0.975      199        105 4571
-          2               1  0.245        3          2 4571
-       2545            2501     NA     2640       2308 4571
-       3163            3147  0.845      118       3105 4571
-        702            2470     NA      416       2732 4571
-          2               2  0.560       60        278 4683
-       1041             739     NA     1488        831 4683
-          5               8  0.580       69        596 4683
-       1385            1212  1.000      566       1023 4658
-         69             293     NA      585        365 4627
-          2               1  0.245        3          2 4571
-       1572            1421     NA     1727       1264 4525
-       1949            1906     NA     1985       1959 4508
-        604             475  1.000      179        424 4453
-         10               6  0.410        7          5 4374
-         29              22  0.905       14         26 4336
-          2               2  0.000        1          2 4278
-         11               9  0.800       11          9 4278
+               check  quarter                       name        group bp_unins rank_unins rank_unins_fhlb bp_all rank_all rank_tier1    n
+    quarter 20211231 20211231 THE FIRST NATIONAL BANK OF credit/fraud       NA       3471            3471     NA     3475       3351 4831
+    quarter 20211231 20211231 THE SANTA ANNA NATIONAL BA credit/fraud       NA       2264            2264     NA     2275       2292 4831
+    quarter 20211231 20211231              CITIZENS BANK credit/fraud       NA        452             451     NA      469        309 4831
+    quarter 20211231 20211231        SILICON VALLEY BANK     rate+run       NA        131             130     NA      151        143 4831
+    quarter 20211231 20211231        SMALL BUSINESS BANK credit/fraud       NA       4036            4036     NA     4038       4088 4831
+    quarter 20211231 20211231 COMMUNITY BANK AND TRUST - credit/fraud       NA          3               2  0.955        6          1 4831
+    quarter 20211231 20211231   HEARTLAND TRI-STATE BANK credit/fraud       NA       1508            1507     NA     1521       1806 4831
+    quarter 20211231 20211231              REPUBLIC BANK     rate+run       NA         18              17     NA       39         13 4831
+    quarter 20211231 20211231       PULASKI SAVINGS BANK credit/fraud       NA       1602            1601     NA     1615       1509 4831
+    quarter 20211231 20211231 KENTLAND FEDERAL SAVINGS A credit/fraud       NA       4463            4463     NA     4464       4449 4831
+    quarter 20211231 20211231             SIGNATURE BANK     rate+run       NA        108             107     NA      128        159 4831
+    quarter 20211231 20211231 METROPOLITAN CAPITAL BANK  credit/fraud       NA       1507            1506     NA     1520       1723 4831
+    quarter 20211231 20211231        FIRST REPUBLIC BANK     rate+run       NA       1240            1239     NA     1254       1183 4831
+    quarter 20221231 20221231 THE FIRST NATIONAL BANK OF credit/fraud       NA       3458            3424     NA     3535       3633 4692
+    quarter 20221231 20221231 THE SANTA ANNA NATIONAL BA credit/fraud       NA       2530            2558     NA     2522       2601 4692
+    quarter 20221231 20221231              CITIZENS BANK credit/fraud       NA        166             494     NA      821        327 4692
+    quarter 20221231 20221231        SILICON VALLEY BANK     rate+run     0.65          2               2  0.560       72        281 4692
+    quarter 20221231 20221231        SMALL BUSINESS BANK credit/fraud       NA       2711            2610  0.855      235       2252 4692
+    quarter 20221231 20221231 COMMUNITY BANK AND TRUST - credit/fraud       NA       1171             868  0.965      353       1206 4692
+    quarter 20221231 20221231   HEARTLAND TRI-STATE BANK credit/fraud       NA       1643            1401  0.995      618       1886 4692
+    quarter 20221231 20221231              REPUBLIC BANK     rate+run     0.38          1               1  0.245        2          6 4692
+    quarter 20221231 20221231       PULASKI SAVINGS BANK credit/fraud       NA       2378            2226  1.000      645       2275 4692
+    quarter 20221231 20221231 KENTLAND FEDERAL SAVINGS A credit/fraud       NA       3870            3859     NA     3916       3830 4692
+    quarter 20221231 20221231             SIGNATURE BANK     rate+run       NA       1054             748     NA     1508        838 4692
+    quarter 20221231 20221231 METROPOLITAN CAPITAL BANK  credit/fraud       NA        421            2943     NA      810       2687 4692
+    quarter 20221231 20221231        FIRST REPUBLIC BANK     rate+run     0.85          4               8  0.580       83        603 4692
+    quarter 20231231 20231231 THE FIRST NATIONAL BANK OF credit/fraud       NA       2660            2612     NA     2750       2399 4576
+    quarter 20231231 20231231 THE SANTA ANNA NATIONAL BA credit/fraud       NA       2146            2199     NA     2154       2150 4576
+    quarter 20231231 20231231        SMALL BUSINESS BANK credit/fraud       NA        130              57  0.785      109         33 4576
+    quarter 20231231 20231231 COMMUNITY BANK AND TRUST - credit/fraud       NA         80              25  0.975      212        106 4576
+    quarter 20231231 20231231              REPUBLIC BANK     rate+run     0.47          1               1  0.245        2          2 4576
+    quarter 20231231 20231231       PULASKI SAVINGS BANK credit/fraud       NA       2552            2507     NA     2653       2309 4576
+    quarter 20231231 20231231 KENTLAND FEDERAL SAVINGS A credit/fraud       NA       3171            3154  0.845      128       3115 4576
+    quarter 20231231 20231231 METROPOLITAN CAPITAL BANK  credit/fraud       NA        706            2476     NA      429       2737 4576
+ last public quarter 20221231        SILICON VALLEY BANK     rate+run     0.65          2               2  0.560       72        281 4692
+ last public quarter 20221231             SIGNATURE BANK     rate+run       NA       1054             748     NA     1508        838 4692
+ last public quarter 20221231        FIRST REPUBLIC BANK     rate+run     0.85          4               8  0.580       83        603 4692
+ last public quarter 20230331   HEARTLAND TRI-STATE BANK credit/fraud       NA       1393            1217  1.000      579       1028 4662
+ last public quarter 20230630              CITIZENS BANK credit/fraud       NA         70             297     NA      602        366 4633
+ last public quarter 20231231              REPUBLIC BANK     rate+run     0.47          1               1  0.245        2          2 4576
+ last public quarter 20240630 THE FIRST NATIONAL BANK OF credit/fraud       NA       1575            1425     NA     1738       1259 4529
+ last public quarter 20240930       PULASKI SAVINGS BANK credit/fraud       NA       1951            1909     NA     1992       1963 4508
+ last public quarter 20250331 THE SANTA ANNA NATIONAL BA credit/fraud       NA        607             478  1.000      187        425 4452
+ last public quarter 20250930 METROPOLITAN CAPITAL BANK  credit/fraud       NA          9               6  0.410        7          5 4367
+ last public quarter 20251231 COMMUNITY BANK AND TRUST - credit/fraud       NA         29              23  0.905       15         27 4329
+ last public quarter 20260331 KENTLAND FEDERAL SAVINGS A credit/fraud     0.00          2               2  0.000        1          2 4270
+ last public quarter 20260331        SMALL BUSINESS BANK credit/fraud       NA         10               9  0.800       11          9 4270
 
 Silicon Valley Bank, 2022Q4 call report, run = 40% of uninsured deposits
 ($ billions)
 Total assets                  209.0
-Deposits / uninsured          175.4 /    151.6
+Deposits / uninsured          175.4 /    151.6  (93.9% of domestic deposits)
 Tier 1 capital                 17.0   (8.13% of assets)
 Cash needed                    60.6
 Where the cash comes from:

@@ -1,7 +1,7 @@
 # Spec: Fold the research prototypes into the data pipeline
 
-Status: PRs 1-5 implemented (see "PR order"); the rest is design. Inline
-"PR 3:", "PR 4:" and "PR 5:" notes record where the code differs from this design.
+Status: PRs 1-6 implemented (see "PR order"); the rest is design. Inline
+"PR 3:" to "PR 6:" notes record where the code differs from this design.
 
 ## Goal
 
@@ -220,6 +220,20 @@ negative (net securities gains) or above 5, so the nightly check does not
 fail on history. The QBP figures live in `HL_QBP_SEC_LOSS`
 (`checks/hidden_loss.R`). Research and the pipeline use the
 floored base variant (open question 2); the history keeps `_sym` and `_cal`.
+
+PR 6: `run_stress` is every filer in the newest quarter. Per run
+(`unins`, `unins_fhlb`, `all`, `all_fhlb`) it has `bp_*`, `how_*` ("below 2%",
+"can't pay", "never", or NA when inputs are missing), `min_ratio_*` and
+`pct_worst_*` (a percentile, not a rank: trap 3), plus `unins_share`,
+`loan_disc`, `na_reason` and `method_version`. Banks with no loans and no
+securities are simulated but not ranked (trap 15). The loan discount comes
+from tonight's `hidden_loss`, so the mart has deps fdic + fred and fails
+when `hidden_loss` did. The check "`t1_after <= RBCT1J`" became "Tier 1
+rises by no more than the securities gains sold", because selling a
+security above cost realizes a gain. The research analysis
+(`research/run-stress/analyze.R`) runs the same functions on older
+quarters from raw + `hidden_loss_history`, and stops unless the newest
+quarter equals the mart.
 
 App-facing rules:
 

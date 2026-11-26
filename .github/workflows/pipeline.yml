@@ -5,8 +5,8 @@
 #   data-raw   release: one parquet per quarter + revisions.csv, fred.*, failures.*
 #   data-marts release: the marts the app reads (fail_panel and
 #              failures_meta included), plus rates_monthly,
-#              research_field_coverage, bank_ids, hidden_loss and
-#              hidden_loss_history (not read by the app)
+#              research_field_coverage, bank_ids, hidden_loss,
+#              hidden_loss_history and run_stress (not read by the app)
 # If an app mart changed, it starts "Test and deploy" so both sites pick
 # them up. Most nights nothing changed and nothing deploys.
 #
@@ -149,7 +149,7 @@ jobs:
       # does not read them yet, so they alone do not start a deploy.
       - name: Publish marts and deploy if they changed
         env:
-          NO_DEPLOY: "rates_monthly.parquet research_field_coverage.parquet bank_ids.parquet hidden_loss.parquet hidden_loss_history.parquet"
+          NO_DEPLOY: "rates_monthly.parquet research_field_coverage.parquet bank_ids.parquet hidden_loss.parquet hidden_loss_history.parquet run_stress.parquet"
         run: |
           changed=0; deploy=0
           for f in pipeline/out/marts/*.parquet; do

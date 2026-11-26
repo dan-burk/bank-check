@@ -18,23 +18,32 @@ also fails ("can't pay").
 
 ## Run it
 
-`simulate.R` sources the research estimator, which moved into the pipeline
-(`pipeline/R/hidden_loss.R`, mart `hidden_loss`). Until the simulator moves
-too (spec `docs/specs/research-pipeline.md`, PR 6), run these at commit
-`a4420c5`, the last commit that has the old estimator.
+The simulator lives in the data pipeline: `pipeline/R/run_stress.R`, with
+every assumption in one list at the top (`RS_PARAMS`). Each night it runs
+on the newest quarter and publishes the `run_stress` mart (one row per
+bank: breaking point, how it breaks, lowest ratio and percentile, for each
+of the four runs). The loan sale discount comes from the `hidden_loss`
+mart. This folder fetches nothing. `analyze.R` runs the same functions on
+the older quarters from the published raw files and `hidden_loss_history`,
+and checks that the newest quarter matches the mart.
 
 ```sh
-Rscript research/backtest/01_fetch.R     # estimator fields, all quarters (cached)
-Rscript research/run-stress/01_fetch.R   # cash, fed funds, FHLB, ... (cached)
-Rscript research/run-stress/02_run.R     # tables, ~1 min
-Rscript research/run-stress/03_chart.R   # run_curves.png
+gh release download data-marts --dir pipeline/out/marts --pattern 'hidden_loss_history.parquet'
+gh release download data-marts --dir pipeline/out/marts --pattern 'run_stress.parquet'
+gh release download data-marts --dir pipeline/out/marts --pattern 'bank_ids.parquet'
+gh release download data-raw   --dir pipeline/out/raw   --pattern 'risdate.20*.parquet'
+gh release download data-raw   --dir pipeline/out/raw   --pattern 'failures.parquet'
+Rscript research/run-stress/analyze.R   # summary.txt, example.txt, ~1 min
+Rscript research/run-stress/chart.R     # run_curves.png
 ```
 
-Outputs: `grid.csv` (banks and assets that break at s = 5/10/20/30/50%, both
-run types, FHLB off/on, every quarter run), `top20_latest.csv`,
-`validation.csv`, `curves.csv`, `example.txt`, `summary.txt`,
-`run_curves.png`. The code is in `simulate.R`, and every assumption is at the
-top of that file.
+`summary.txt` has every table below (banks that break at s = 5/10/20/30/50%
+for both run types with FHLB off and on, the top 20, the validation).
+`analyze.R` also writes `out/curves.csv` and `out/validation.csv` for the
+chart (gitignored). The failures come from the FDIC list
+(`failures.parquet`, `RESTYPE == "FAILURE"` since 2022). Each one is scored
+on the last quarter that was public 45 days after quarter end before it
+failed, picked from every raw quarter on hand.
 
 ## How the simulator works: Silicon Valley Bank, 2022Q4, 40% uninsured run
 
@@ -42,7 +51,7 @@ All numbers are from SVB's 2022Q4 call report, in $ billions (`example.txt`).
 
 | Step | | |
 |---|---|---|
-| Start | assets 209.0, deposits 175.4 (151.6 uninsured), Tier 1 capital 17.0 | ratio **8.13%** |
+| Start | assets 209.0, deposits 175.4 (151.6 uninsured, 93.9% of domestic deposits), Tier 1 capital 17.0 | ratio **8.13%** |
 | Run | 40% of 151.6 uninsured leave | needs **60.6** in cash |
 | 1. Cash above a 2% operating floor | 12.5 on hand minus 4.2 kept back | 8.3, no loss |
 | 2. Fed funds sold and reverse repos | | 0.7, no loss |
@@ -72,35 +81,49 @@ a bank needs both large hidden losses and a large run to break.
 | 10% | 0 | 0 |
 | 20% | 0 | 2 ($0.1B) |
 | 30% | 0 | 3 ($0.2B) |
-| 50% | 1 ($0.1B)* | 12 ($8.4B) |
+| 50% | 1 ($0.1B)* | 14 ($10.5B) |
 
 For contrast, at 2022Q4 a 50% uninsured run breaks 1 bank (Republic First,
-$6B), and a 50% all-deposit run breaks 38 banks ($53B). Today an uninsured run
+$6B), and a 50% all-deposit run breaks 46 banks ($57B). Today an uninsured run
 of any size breaks only 2 banks. Unrealized losses have shrunk since 2022, and
 most banks hold enough capital to absorb what is left.
 *\*a small trust company whose assets are mostly not cash, securities or
-loans. This is an artifact of the "can't pay" rule, not a capital problem.*
+loans. This is an artifact of the "can't pay" rule, not a capital problem,
+so banks with no loans and no securities are not ranked.*
 
 With **FHLB borrowing ON** (cap 25% of assets), almost nothing breaks: 2026Q3
-at a 50% all-deposit run drops from 12 banks to 1. In 2022Q4, SVB's breaking
+at a 50% all-deposit run drops from 14 banks to 1. In 2022Q4, SVB's breaking
 point moves from 65% to 89.5%, and First Republic's from 85% to never. The
 backstop matters most because it lets a bank meet the run without selling.
 
 **Validation.** Rank 1 = most fragile, ranked by breaking point (banks that
 never break are ordered after those that do, by the lowest ratio they hit).
+Banks with missing inputs, or no loans and no securities, are not ranked.
 
 | bank (failed) | quarter used | breaking point, uninsured | rank | Tier 1 leverage rank |
 |---|---|---|---|---|
-| Republic First (2024-04) | 2022Q4 | 38% | **1** of 4,683 | 6 |
-| Silicon Valley (2023-03) | 2022Q4 | 65% | **2** | 278 |
-| First Republic (2023-05) | 2022Q4 | 85% | **5** | 596 |
-| Signature (2023-03) | 2022Q4 | never | 1,041 | 831 |
-| SVB / Signature / First Republic | 2021Q4 | never | 132 / 109 / 1,241 | 145 / 159 / 1,192 |
-| Republic First | 2023Q4 | 47% | 2 of 4,571 | 2 |
+| Republic First (2024-04) | 2022Q4 | 38% | **1** of 4,692 | 6 |
+| Silicon Valley (2023-03) | 2022Q4 | 65% | **2** | 281 |
+| First Republic (2023-05) | 2022Q4 | 85% | **4** | 603 |
+| Signature (2023-03) | 2022Q4 | never | 1,054 | 838 |
+| SVB / Signature / First Republic | 2021Q4 | never | 131 / 108 / 1,240 | 143 / 159 / 1,183 |
+| Republic First | 2023Q4 | 47% | 1 of 4,576 | 2 |
 
-In 2022Q4, 10 banks had an uninsured breaking point at or below 100%. One of
-them was a trust-company artifact. Of the other 9, 3 failed: SVB and First
-Republic within five months, Republic First within 16 months.
+In 2022Q4, 11 banks had an uninsured breaking point at or below 100%. One of
+them was the trust-company artifact (not ranked). Of the other 10, 3 failed:
+SVB and First Republic within five months, Republic First within 16 months.
+
+*What changed when the simulator moved into the pipeline (PR 6):* the
+breaking points of the failed banks, and the SVB walk-through, are
+unchanged. The banks counted changed. The estimator used to drop banks
+whose total equity was zero or negative. These are mostly banks with large
+AOCI losses whose Tier 1 is still 7 to 14%. Now they are kept: 21 more in
+2022Q4 and 4 in 2026Q3. Several of them break in an all-deposit run, so
+the 50% counts rose from 38 to 46 (2022Q4) and from 12 to 14 (2026Q3). The
+trust company is no longer ranked, so First Republic moved from 5th to 4th.
+Uninsured share is now uninsured / *domestic* deposits (SVB 93.9%, was
+86.4% of all deposits). The run itself always used the uninsured dollar
+amount, so no breaking point moved.
 
 At 2021Q4, before rates rose, the simulator sees nothing. Losses were small
 then, so no run breaks SVB.
@@ -112,11 +135,11 @@ which this model does not capture.
 **Any-era check: all 13 failures since 2022**, each from the last call report
 that was public before it failed (`validation.csv`, "last public quarter"):
 - **Rate-plus-run failures:** the breaking point clearly beats Tier 1. SVB
-  ranks 2 vs 278, First Republic 5 vs 596, Republic First 2 vs 2.
+  ranks 2 vs 281, First Republic 4 vs 603, Republic First 1 vs 2.
 - **Credit and fraud failures (9 banks):** it adds nothing. None of them has a
   breaking point, except Kentland, which was already below 2% before any run.
-  Their ranks track Tier 1, for example Metropolitan 10 vs 5 and Small
-  Business Bank 11 vs 9.
+  Their ranks track Tier 1, for example Metropolitan 9 vs 5 and Small
+  Business Bank 10 vs 9.
 
 This is a tool for one failure mode, not a general failure predictor.
 
@@ -135,7 +158,7 @@ This is a tool for one failure mode, not a general failure predictor.
 | FHLB, when ON: total advances up to 25% of assets, with no collateral check | too safe when ON |
 | No other help: no discount window, no BTFP, no capital raise, no merger | too **fragile** |
 | No income or expenses during the run; the run is one instant | small |
-| Banks with zero deposits (trust companies, ~60) are dropped | none |
+| Banks with zero deposits (trust companies, ~60), and the 17 insured branches of foreign banks (no Tier 1), get NA with a reason, not "never breaks" | none |
 
 Overall the model leans **safe**: a bank it breaks is in real trouble, and a
 bank it passes may still fail from speed, credit losses or fraud.

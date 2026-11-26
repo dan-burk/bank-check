@@ -35,6 +35,8 @@
 #   marts/hidden_loss.parquet, marts/hidden_loss_history.parquet
 #                                     hidden-loss estimate per bank and quarter
 #                                     (R/hidden_loss.R), not read by the app yet
+#   marts/run_stress.parquet          deposit-run breaking point per bank, newest
+#                                     quarter (R/run_stress.R), not read by the app yet
 #
 # The work is in pipeline/R/ (transport, raw store, source registry), pipeline/sources/
 # (pulls), pipeline/marts/ (builders) and pipeline/checks/.
@@ -56,13 +58,13 @@ for (d in c(RAW, MARTS)) dir.create(d, recursive = TRUE, showWarnings = FALSE)
 source(file.path("app", "R", "api.R"))
 source(file.path("app", "R", "statements.R"))
 for (f in c("R/http.R", "R/store.R", "sources/fdic.R", "sources/fred.R",
-            "sources/failures.R", "R/sources.R", "R/hidden_loss.R",
+            "sources/failures.R", "R/sources.R", "R/hidden_loss.R", "R/run_stress.R",
             "marts/industry.R", "marts/snapshot.R", "marts/rates.R",
             "marts/fail_panel.R", "marts/research_coverage.R", "marts/bank_ids.R",
-            "marts/hidden_loss.R",
+            "marts/hidden_loss.R", "marts/run_stress.R",
             "checks/check.R", "checks/snapshot.R", "checks/industry.R",
             "checks/rates.R", "checks/fail_panel.R", "checks/research_coverage.R",
-            "checks/bank_ids.R", "checks/hidden_loss.R")) {
+            "checks/bank_ids.R", "checks/hidden_loss.R", "checks/run_stress.R")) {
   source(file.path("pipeline", f))
 }
 
@@ -150,7 +152,16 @@ marts_ok <- c(
       # gzip: 2.1 MB and 46 MB (zstd: 5.2 and 129, as for fail_panel)
       write_parquet(hidden_loss_app(hl$history), path[["hidden_loss"]], compression = "gzip")
       write_parquet(hl$history, path[["hidden_loss_history"]], compression = "gzip")
-    })
+    }),
+  # Reads tonight's hidden_loss (so FRED too): skipped with it, failed when it failed
+  run_stress = build_optional_mart("run_stress", c("fdic", "fred"), src, function(path) {
+    hl_path <- file.path(MARTS, "hidden_loss.parquet")
+    if (!file.exists(hl_path)) stop("hidden_loss was not built this run")
+    rs <- build_run_stress(files[raw_rds(files) == newest], as.data.frame(read_parquet(hl_path)))
+    report_run_stress(rs$mart)
+    check_run_stress(rs$mart, rs$inputs, newest)
+    write_parquet(rs$mart, path)
+  })
 )
 
 cat(sprintf("Done: %d requests, %.0f s. Raw %.1f MB across %d quarters.\n",
