@@ -41,6 +41,10 @@ FAIL_META  <- load_fail_meta()
 TRAJ_REGIONS <- c("Midwest", "Northeast", "South", "West")
 TRAJ_SIZES   <- c("Under $100M", "$100M to $1B", "$1B to $10B", "Over $10B")
 
+# Overview stress card (R/stress.R): the hidden_loss and run_stress marts,
+# each NULL when its file is missing (that half of the card is hidden)
+STRESS <- load_stress()
+
 EMPTY_MSG <- "Search for a bank in the sidebar to load its history."
 
 # URL for a file in www/ with a short content hash, e.g. "app.js?v=1a2b3c4d".
@@ -644,8 +648,33 @@ server <- function(input, output, session) {
           col_widths = breakpoints(xs = 12, lg = c(6, 6)),
           div(tags$h6("Balance Sheet"), uiOutput("bs_table")),
           div(tags$h6("Income Statement"), uiOutput("is_table")))
-      )
+      ),
+      uiOutput("stress_card")
     )
+  })
+  # Stress card: hidden losses (boxes and a 20-quarter chart) and the
+  # deposit-run table. No card when both marts are missing; no chart
+  # without a hidden-loss estimate for the bank in some quarter.
+  stress_hl <- reactive(hl_bank(STRESS$hl, input$bank_pick, cur()))
+  output$stress_card <- renderUI({
+    req(bank_picked())
+    if (is.null(STRESS$hl) && is.null(STRESS$rs)) return(NULL)
+    hl <- stress_hl()
+    card(
+      chip_header("Stress Test", "Sensitivity"),
+      div(class = "text-muted small", STRESS_CAVEAT),
+      stress_hidden_ui(hl, XS_RD),
+      if (hl_has_series(hl)) plotlyOutput("stress_plot", height = "260px"),
+      stress_run_ui(rs_bank(STRESS$rs, input$bank_pick), XS_RD),
+      # The footer only explains the run table's stars
+      if (!is.null(STRESS$rs)) card_footer(
+        class = "text-muted small",
+        star_line("Uninsured: over $250K. FHLB: loans up to 25% of assets")))
+  })
+  output$stress_plot <- renderPlotly({
+    hl <- stress_hl()
+    req(hl_has_series(hl))
+    hidden_equity_lines(hl)
   })
   # One statement table (bank or industry) with its $/% and QoQ/YoY inputs
   statement_ui <- function(section, data, unit_id, cmp_id,

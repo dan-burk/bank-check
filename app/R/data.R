@@ -138,6 +138,13 @@ read_mart <- function(name) {
   as.data.frame(nanoparquet::read_parquet(f))
 }
 
+# A mart the app can do without (the research marts): NULL when the file is
+# not in data/, so the caller hides its section instead of stopping the app
+read_mart_optional <- function(name) {
+  if (!file.exists(file.path("data", paste0(name, ".parquet")))) return(NULL)
+  read_mart(name)
+}
+
 # Newest quarter, one row per bank, plus active banks that have not filed
 # yet (no RISDATE). Feeds both the peer bands and the bank picker.
 load_snapshot <- function() read_mart("latest_snapshot")

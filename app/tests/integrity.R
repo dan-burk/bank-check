@@ -34,6 +34,7 @@ source("R/theme.R")
 source("R/data.R")
 source("R/plots.R")
 source("R/statements.R")
+source("R/stress.R")
 
 INTEGRITY_SEED <- Sys.getenv("INTEGRITY_SEED", "20260716")
 
@@ -354,6 +355,42 @@ for (nm in names(sweep)) {
   }
 }
 cat("cross-section sweep done:", nrow(xs), "banks\n")
+
+# Stress card: the hidden_loss mart against the raw cross-section. Equity
+# after hidden losses must be (EQTOT - hidden loss) / ASSET from the raw
+# columns (the mart rounds losses to $1k and ratios to 5 decimals), the
+# hidden loss its parts, and the chart must plot raw EQTOT / ASSET as
+# "As reported" and the mart's ratio, nothing else
+st <- load_stress()
+if (is.null(st$hl)) {
+  cat("stress: hidden_loss mart missing, skipped\n")
+} else if (max(st$hl$RISDATE) != XS_RISDATE) {
+  weird("stress", sprintf("hidden_loss newest quarter %d is not the snapshot's %d (card says 'older than')",
+                          max(st$hl$RISDATE), XS_RISDATE))
+} else {
+  for (cert in roster$CERT) {
+    raw <- xs_raw[xs_raw$CERT == cert, ]
+    d <- hl_bank(st$hl, cert, raw)
+    r <- d[d$RISDATE == XS_RISDATE, ]
+    if (nrow(r) != 1 || is.na(r$hidden_loss)) {
+      weird(cert, paste0("no hidden-loss estimate: ", if (nrow(r)) r$na_reason else "no row"))
+      next
+    }
+    tag <- function(nm) paste0(nm, " CERT ", cert)
+    expect_near(tag("stress adj_equity_to_assets"), r$adj_equity_to_assets,
+                (raw$EQTOT - r$hidden_loss) / raw$ASSET, tol = 1e-5 + 1 / raw$ASSET)
+    expect_near(tag("stress hidden_loss parts"), r$hidden_loss,
+                r$loss_htm + r$loss_loans_res + r$loss_loans_oth, tol = 2)
+    expect_near(tag("stress loss_to_equity"), r$loss_to_equity,
+                if (raw$EQTOT > 0) r$hidden_loss / raw$EQTOT else NA_real_)
+    tr <- built_traces(hidden_equity_lines(d))
+    keys <- as.Date(as.character(d$RISDATE), "%Y%m%d")
+    expect_trace(tag("stress chart Reported"), tr, "Reported", keys,
+                 ifelse(d$RISDATE == XS_RISDATE, round(100 * raw$EQTOT / raw$ASSET, 2), NA))
+    expect_trace(tag("stress chart After losses"), tr, "After losses", keys,
+                 round(100 * d$adj_equity_to_assets, 2))
+  }
+}
 
 # Delinquency chart's industry lines: every quarter vs the mart's summed
 # dollars, and the newest quarter vs the raw cross-section summed here

@@ -15,6 +15,7 @@ source("R/theme.R")
 source("R/data.R")
 source("R/plots.R")
 source("R/statements.R")
+source("R/stress.R")
 
 # Two-bank fixture (Dacotah 1984+, First B&T) in raw API columns, so the
 # test exercises derive() just as a live fetch would
@@ -421,6 +422,79 @@ ttl <- pt$x$layout$yaxis$title
 if (is.list(ttl)) ttl <- ttl$text
 stopifnot(grepl("($", ttl, fixed = TRUE))
 cat("ok: trajectory_plot usd scaled + labeled\n")
+
+# Stress card (R/stress.R) on hand-built rows: equity from the bank's own
+# history, NA in words (never $0), the stale-quarter label, each run cell
+hl_fx <- data.frame(CERT = 1L, RISDATE = c(20260930L, 20260630L),
+                    hidden_loss = c(2500, 3000), adj_equity_to_assets = c(0.05, 0.07),
+                    pct_worst = c(0.10, 0.30), na_reason = NA_character_)
+hist_fx <- data.frame(RISDATE = c("20260630", "20260930"), EQTOT = c(0, 5000),
+                      ASSET = 50000)
+d <- hl_bank(hl_fx, "1", hist_fx)
+stopifnot(identical(d$RISDATE, c(20260630L, 20260930L)),          # oldest first
+          isTRUE(all.equal(d$eq_to_assets, c(0, 0.1))),
+          isTRUE(all.equal(d$loss_to_equity, c(NA, 0.5))),         # no equity: NA
+          hl_has_series(d), nrow(hl_bank(hl_fx, "2", hist_fx)) == 0,
+          is.null(hl_bank(NULL, "1", hist_fx)), is.null(stress_hidden_ui(NULL, 20260930)),
+          is.null(rs_bank(NULL, "1")), is.null(stress_run_ui(NULL, 20260930)))
+h <- as.character(stress_hidden_ui(d, 20260930))
+stopifnot(grepl("$2.5M", h, fixed = TRUE), grepl("50% of equity", h, fixed = TRUE),
+          grepl(">5% of assets<", h, fixed = TRUE), grepl("Reported: 10%", h, fixed = TRUE),
+          grepl(">10th<", h, fixed = TRUE), grepl("vs. all banks", h, fixed = TRUE),
+          grepl("Hidden losses, Q3 2026<", h, fixed = TRUE),
+          !grepl("not latest", h, fixed = TRUE),
+          grepl("Q3 2026 (not latest)",
+                as.character(stress_hidden_ui(d, 20261231)), fixed = TRUE),
+          grepl("No estimate.",
+                as.character(stress_hidden_ui(d[0, ], 20260930)), fixed = TRUE))
+d_na <- d[2, ]
+d_na$hidden_loss <- NA; d_na$adj_equity_to_assets <- NA; d_na$pct_worst <- NA
+d_na$na_reason <- "no loan maturity buckets"
+h <- as.character(stress_hidden_ui(d_na, 20260930))
+stopifnot(!hl_has_series(d_na), grepl('title="no loan maturity buckets"', h, fixed = TRUE),
+          lengths(regmatches(h, gregexpr(">Not reported<", h, fixed = TRUE))) == 3,
+          !grepl("$0", h, fixed = TRUE))
+pe <- plotly::plotly_build(hidden_equity_lines(d))$x$data
+stopifnot(identical(vapply(pe, `[[`, "", "name"), c("Reported", "After losses")),
+          isTRUE(all.equal(as.numeric(unlist(pe[[1]]$y)), c(0, 10))),
+          isTRUE(all.equal(as.numeric(unlist(pe[[2]]$y)), c(7, 5))))
+rs_fx <- data.frame(CERT = 1L, RISDATE = 20260930L,
+                    bp_unins = NA, how_unins = "never",
+                    bp_unins_fhlb = NA, how_unins_fhlb = NA,
+                    bp_all = 0.605, how_all = "below 2%",
+                    bp_all_fhlb = 0.33, how_all_fhlb = "can't pay",
+                    na_reason = "no FHLB advances reported (FHLB-on runs)")
+h <- as.character(stress_run_ui(rs_bank(rs_fx, 1), 20260930))
+stopifnot(grepl(">Survives<", h, fixed = TRUE),
+          grepl("Fails at 60.5%<", h, fixed = TRUE),
+          grepl("Fails at 33%<", h, fixed = TRUE),
+          !grepl("(", sub(".*<tbody>", "", h), fixed = TRUE),     # no reasons in cells
+          grepl('title="no FHLB advances reported">Not reported<', h, fixed = TRUE),
+          grepl("Deposit run<", h, fixed = TRUE),
+          grepl("Deposit run, Q3 2026 (not latest)",
+                as.character(stress_run_ui(rs_fx, 20261231)), fixed = TRUE),
+          grepl("No estimate.",
+                as.character(stress_run_ui(rs_fx[0, ], 20260930)), fixed = TRUE),
+          identical(run_na_why("no Tier 1 capital; no FHLB advances reported (FHLB-on runs)", "unins"),
+                    "no Tier 1 capital"),
+          identical(run_na_why("no uninsured deposits reported (uninsured runs)", "all"),
+                    "inputs not reported"),
+          identical(run_na_why(NA, "all"), "inputs not reported"))
+# The shipped marts: every column the card reads, and no unexplained NA
+stopifnot(is.null(read_mart_optional("no_such_mart")))
+st <- load_stress()
+if (is.null(st$hl) || is.null(st$rs)) {
+  stop("hidden_loss and run_stress marts are missing from app/data: ",
+       "gh release download data-marts --dir app/data --clobber")
+}
+stopifnot(all(c("CERT", "RISDATE", "hidden_loss", "adj_equity_to_assets", "pct_worst",
+                "na_reason") %in% names(st$hl)),
+          all(c("CERT", "RISDATE", "na_reason", paste0(rep(c("bp_", "how_"), each = 4),
+                c("unins", "unins_fhlb", "all", "all_fhlb"))) %in% names(st$rs)),
+          !any(is.na(st$hl$hidden_loss) & is.na(st$hl$na_reason)),
+          all(st$rs$how_unins %in% c("never", "below 2%", "can't pay", NA)),
+          length(unique(st$rs$RISDATE)) == 1, max(st$hl$RISDATE) >= st$rs$RISDATE[1])
+cat("ok: stress card (hand-built rows, NA in words, stale label, runs; marts have its columns)\n")
 cat("all builders ok\n")
 
 # Server outputs via testServer, with a comparison bank active
@@ -572,5 +646,42 @@ shiny::testServer(app = "app", {
             all(traj_meta_r()$region == "Midwest"))
   stopifnot(!is.null(output$traj_plot))
   cat("ok output: traj_plot filtered to Midwest\n")
+
+  # Stress card with both marts: caveat, both halves, the chart
+  session$setInputs(bank_pick = "17437")
+  sc <- output$stress_card$html
+  stopifnot(grepl("Estimates.", sc, fixed = TRUE),
+            grepl("Hidden losses, ", sc, fixed = TRUE),
+            grepl("Deposit run", sc, fixed = TRUE),
+            grepl("stress_plot", sc, fixed = TRUE))
+  sp <- jsonlite::fromJSON(output$stress_plot, simplifyVector = FALSE)
+  stopifnot(identical(vapply(sp$x$data, `[[`, "", "name"), c("Reported", "After losses")))
+  cat("ok output: stress_card and stress_plot\n")
 })
+
+# Missing research marts: the app still runs and hides only what it lacks.
+# The files are renamed aside (same folder: a rename across devices fails)
+# and always put back.
+mart_file <- function(m) file.path("app/data", paste0(m, ".parquet"))
+aside <- function(m) paste0(mart_file(m), ".smoke-aside")
+for (gone in list(c("hidden_loss", "run_stress"), "hidden_loss", "run_stress")) {
+  stopifnot(file.rename(mart_file(gone), aside(gone)))
+  tryCatch(shiny::testServer(app = "app", {
+    session$setInputs(bank_pick = "17437")
+    stopifnot(!is.null(output$kpis), !is.null(output$overview_grid))
+    sc <- output$stress_card$html
+    sc <- if (is.null(sc)) "" else as.character(sc)
+    has_hl <- !"hidden_loss" %in% gone; has_rs <- !"run_stress" %in% gone
+    stopifnot(grepl("Stress Test", sc, fixed = TRUE) == (has_hl || has_rs),
+              grepl("Hidden losses, ", sc, fixed = TRUE) == has_hl,
+              grepl("stress_plot", sc, fixed = TRUE) == has_hl,
+              grepl("Deposit run", sc, fixed = TRUE) == has_rs,
+              grepl("FHLB: loans up to", sc, fixed = TRUE) == has_rs)
+    if (!has_hl) {
+      e <- tryCatch({ output$stress_plot; NULL }, error = function(e) e)
+      stopifnot(inherits(e, "error"))   # req() halts: no chart
+    }
+  }), finally = stopifnot(file.rename(aside(gone), mart_file(gone))))
+  cat("ok output: stress card without", paste(gone, collapse = " + "), "\n")
+}
 cat("smoke test passed\n")

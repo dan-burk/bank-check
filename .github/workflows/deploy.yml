@@ -72,6 +72,9 @@ jobs:
       # they are downloaded once here, one file per call so a missing mart
       # fails the job, and handed to the deploy jobs as an artifact: every
       # job tests or ships the same copy, even if the pipeline is mid-upload.
+      # hidden_loss and run_stress feed the Overview's stress card (the app
+      # hides it if they are missing, but the deploy insists on them, so
+      # both sites always ship it). Never hidden_loss_history: research only.
       - name: Download marts
         env:
           GH_TOKEN: ${{ github.token }}
@@ -80,6 +83,8 @@ jobs:
           gh release download data-marts --dir app/data --clobber --pattern 'industry_quarterly.parquet'
           gh release download data-marts --dir app/data --clobber --pattern 'fail_panel.parquet'
           gh release download data-marts --dir app/data --clobber --pattern 'failures_meta.parquet'
+          gh release download data-marts --dir app/data --clobber --pattern 'hidden_loss.parquet'
+          gh release download data-marts --dir app/data --clobber --pattern 'run_stress.parquet'
 
       - name: Upload marts artifact
         uses: actions/upload-artifact@v4
@@ -90,6 +95,8 @@ jobs:
             app/data/industry_quarterly.parquet
             app/data/fail_panel.parquet
             app/data/failures_meta.parquet
+            app/data/hidden_loss.parquet
+            app/data/run_stress.parquet
           if-no-files-found: error
 
       # Reads only the marts and a fixture, never the FDIC API, so API
