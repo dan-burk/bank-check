@@ -1,9 +1,10 @@
 # Spec: Fold the research prototypes into the data pipeline
 
-Status: PRs 1-7, 9 and 10 implemented (see "PR order"); PRs 8 and 11
-(app) are skipped for now: the research marts are published but not
-shown. Inline "PR 3:" to "PR 10:" notes record where the code differs
-from this design.
+Status: PRs 1-10 implemented (see "PR order"). PR 8 shows `hidden_loss`
+and `run_stress` on the Overview (Daniel, 2026-11-27; open questions 2,
+3 and 7). PR 11 (mortgage book rate in the app) is skipped for now.
+Inline "PR 3:" to "PR 10:" notes record where the code differs from this
+design.
 
 ## Goal
 
@@ -341,6 +342,33 @@ App-facing rules:
 - Keep each app mart under about 1 MB, because it ships inside the browser
   bundle.
 
+PR 8: the Overview gets a "Stress Test" card under the statements
+(`app/R/stress.R`, `hidden_equity_lines()` in `plots.R`). Hidden loss in
+$ and as % of equity, equity after hidden losses / assets ("as reported"
+beside it) and its percentile (`pct_worst`, trap 3), a chart of both
+ratios over the mart's 20 quarters, and a table of the four breaking
+points in words ("Fails after 60.5% leaves (capital falls below 2% of
+assets)", "Survives, even if all of it leaves", or "Not reported:
+<na_reason>", with each run's reasons only; trap 16). One bold caveat
+line (open question 3). Differences from the rules above:
+
+- "As reported" equity / assets and the loss as % of equity use EQTOT
+  and ASSET from the bank's own fetched history, matched on quarter,
+  rather than new mart columns, so the marts are unchanged. The
+  integrity test ties them to raw
+  (`(EQTOT - hidden_loss) / ASSET` = the mart's ratio for 10 banks).
+- The "as of" rule is one label for both halves: the quarter, plus
+  "older than the latest quarter (Qn)" when it is not the snapshot's.
+- `hidden_loss` ships at 2.15 MB (plus `run_stress` 0.4 MB), over the
+  1 MB target, untrimmed: Q7 kept 20 quarters and the chart uses them,
+  and `fail_panel` (3 MB) already sets the bundle's scale. Trimming the
+  unused input columns is a possible follow-up.
+- The deploy downloads both by name and fails if either is missing, so
+  the sites always ship the card; the app's missing-file handling
+  (`read_mart_optional()`) covers local runs and any future removal.
+  The run percentiles (`pct_worst_*`) are not shown, so trap 15 needs
+  nothing in the app.
+
 ## What becomes shared code, what stays research
 
 | Research file | Goes to | Changes on the way |
@@ -540,7 +568,7 @@ Each PR is small, leaves main working, and can ship alone.
 | 5 | **`hidden_loss` and `hidden_loss_history` marts**: `R/hidden_loss.R`, checks, golden tests. Trim `research/unrealized-losses` to README plus analysis reading the mart. Close #19 | M | 2, 4 | marts (no UI yet) |
 | 6 | **`run_stress` mart**: `R/run_stress.R`, checks, SVB/Republic First golden tests. Trim `research/run-stress`. Close #22 | S | 5 | mart |
 | 7 | **BTFP static file**, then re-point `research/backtest` at the marts. Delete its fetch and probe. Close #21. Done | S | 3, 5 | research reproducible from releases |
-| 8 | **App: hidden loss and breaking point** on the bank view (deploy pattern, missing-mart handling, smoke test) | M | 5, 6 | first user-visible change |
+| 8 | **App: hidden loss and breaking point** on the bank view (deploy pattern, missing-mart handling, smoke test). Done (see the PR 8 note under "App-facing rules") | M | 5, 6 | first user-visible change |
 | 9 | **HMDA source** (`hmda.yml`, snapshot stream and filter, `hmda.panel`, `bank_ids` LEI links, `hmda.groups`). Done | L | 2, 4 | raw HMDA in the release |
 | 10 | **`hmda_book` mart** plus golden test. Trim `research/hmda-mortgage-rates`. Close #20 (already merged). Done | M | 9 | mart |
 | 11 | **App: mortgage book rate**. Skipped for now: scores stay off the website | S | 10 | UI |
@@ -557,9 +585,16 @@ open questions.
    back itself. OK?
 2. **Which hidden-loss number goes in the app?** The floored base version
    (the #21 default and recommended), the calibrated one, or both?
+   **Answered (Daniel, 2026-11-27): the floored base version only, which
+   is what the mart ships.** The calibrated and symmetric variants stay
+   in `hidden_loss_history` for research.
 3. **Should these show in the app at all, or only be published as data
    first?** They are estimates with known biases (no deposit franchise, no
    credit loss). The app would need a plain caveat line.
+   **Answered (Daniel, 2026-11-27): yes, show them, with one plain caveat
+   line** ("Estimates, not reported figures. They leave out what the
+   bank's depositor relationships are worth to it, and any losses from
+   borrowers who stop paying."). Implemented in PR 8.
 4. **HMDA scope.** All HMDA-reporting banks from the national snapshot
    (yearly, multi-GB stream, and `data.table` as a pipeline-only
    dependency), or a short list of banks through the data browser as in
@@ -574,5 +609,8 @@ open questions.
    keep it in the release only?
 7. **History length.** The app gets the last 20 quarters of hidden loss,
    and the full 1997+ panel goes to research only. Enough?
+   **Answered (Daniel, 2026-11-27): yes. The app gets the last 20
+   quarters (`hidden_loss`); `hidden_loss_history` stays research only**
+   (in `NO_DEPLOY`, never downloaded by `deploy.yml`).
 8. **FRED access.** Keep the keyless `fredgraph.csv` download, or register
    an API key (a repo secret) for the official API?

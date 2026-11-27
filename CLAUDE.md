@@ -15,7 +15,8 @@ User docs are in `README.md`, and the pipeline design is in `pipeline/README.md`
 | `app/R/data.R` | `derive()`, the live per-bank fetch and its cache, mart loaders (`load_snapshot`, `load_industry`), peer stats |
 | `app/R/statements.R` | `statement_lines()`, `statement_table()`, `STATEMENT_FIELDS`, `industry_totals()`. The pipeline uses these too |
 | `app/R/plots.R`, `theme.R` | Plotly builders, colors |
-| `app/data/` | Shipped data: `fields_meta.csv`, `data-dictionary.md`. Mart `*.parquet` files (including `fail_panel`, `failures_meta`) are gitignored and downloaded |
+| `app/R/stress.R` | Overview stress card: hidden loss and deposit-run breaking point from the optional `hidden_loss` / `run_stress` marts (`read_mart_optional`: a missing file hides its half) |
+| `app/data/` | Shipped data: `fields_meta.csv`, `data-dictionary.md`. Mart `*.parquet` files (including `fail_panel`, `failures_meta`, `hidden_loss`, `run_stress`) are gitignored and downloaded |
 | `app/tests/smoke.R` | Deploy gate. Runs offline from the marts and `tests/fixtures/sd_banks.rds` (Dacotah, history from 1984, plus First B&T) |
 | `app/tests/integrity.R` | Recomputes chart values from the raw FDIC columns. Phase 2 hits the live API. `INTEGRITY_SKIP_LIVE=1` runs it offline |
 | `pipeline/build.R` | Nightly ETL entry point: pulls the last N quarters, writes the revisions log, builds the marts, runs the mart checks. The pieces: `R/` (throttled transport, raw store, source registry, pure estimators), `sources/` (`fdic.R`, `fred.R`, `failures.R`; `btfp.R` is one-time, by hand, writing the committed `static/btfp.*`; `hmda.R` is yearly, pulled only by `hmda.yml`; its nightly registry entry only checks the stored groups), `marts/`, `checks/`, `tests/` (offline, `pipeline-test.yml`) |
@@ -38,17 +39,19 @@ quarter (paged past the 10k-row cap). It writes:
   `hmda.groups`, never `hmda.lar.*`.
 - **marts**: `industry_quarterly` (one row per quarter, built from every
   raw file on hand), `latest_snapshot` (newest quarter plus the active
-  directory), and `fail_panel` + `failures_meta` (the failures tab, cut
+  directory), `fail_panel` + `failures_meta` (the failures tab, cut
   from the raw quarters using the `failures.parquet` list pulled each
-  night). Plus marts the app does not read yet: `rates_monthly`,
-  `research_field_coverage`, `bank_ids`, and `hidden_loss` (last 20
-  quarters) with `hidden_loss_history` (1997 on), from the pure estimator
-  `pipeline/R/hidden_loss.R`, `run_stress` (deposit-run breaking point
-  per bank, newest quarter, from `pipeline/R/run_stress.R`), and
-  `hmda_book` (HMDA mortgage book rate and loss per bank at the newest
-  quarter, from `hb_value()` in `pipeline/R/hmda_book.R`). Stored in the
-  `data-marts` release. These research marts are in `NO_DEPLOY`
-  (`pipeline.yml`) and stay off the website until an app PR adds them.
+  night), and the Overview's stress card: `hidden_loss` (last 20 quarters,
+  from the pure estimator `pipeline/R/hidden_loss.R`) and `run_stress`
+  (deposit-run breaking point per bank, newest quarter, from
+  `pipeline/R/run_stress.R`). Plus marts the app does not read:
+  `rates_monthly`, `research_field_coverage`, `bank_ids`,
+  `hidden_loss_history` (1997 on, research only), and `hmda_book` (HMDA
+  mortgage book rate and loss per bank at the newest quarter, from
+  `hb_value()` in `pipeline/R/hmda_book.R`). Stored in the `data-marts`
+  release. Those are in `NO_DEPLOY` (`pipeline.yml`) and stay off the
+  website until an app PR adds them (to `deploy.yml` by name, and out of
+  `NO_DEPLOY`).
 
 Each deploy downloads the marts into `app/data/` and ships them inside the
 site. The app does no multi-bank fetching. A single bank's history is

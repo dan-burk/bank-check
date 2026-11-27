@@ -94,7 +94,8 @@ flowchart LR
    published copy), upload the marts to `data-marts`, and start the deploy
    if one the app reads changed. The marts the app does not read
    (`NO_DEPLOY` in `pipeline.yml`: `rates_monthly`, `research_field_coverage`,
-   `bank_ids`, `hidden_loss`, `hidden_loss_history`, `run_stress`, `hmda_book`) never start a deploy.
+   `bank_ids`, `hidden_loss_history`, `hmda_book`) never start a deploy.
+   `hidden_loss` and `run_stress` do: the Overview's stress card reads them.
    Most nights nothing changed and nothing deploys.
 
 Steps 1 to 3 run for each source in the registry (`pipeline/R/sources.R`),
@@ -126,9 +127,9 @@ is what the deploy ships.
 | `failures_meta` | failed bank: `label`, `NAME`, `CITY`, `PSTALP`, `fail_date`, `QBFASSET`, `region`, `size_bucket`, `n_filings` | Failures tab: the picker and its region and size filters |
 | `research_field_coverage` | quarter × `RESEARCH_FIELDS` field: `in_raw`, `n_reported`, `asset_share` (weighted as `field_coverage`) | Audit of the research inputs. Not read by the app |
 | `bank_ids` | CERT that ever filed: `NAMEFULL`, `first_risdate`, `last_risdate`, `RSSD`, `rssd_source`, `rssd_risdate`, `n_rssd`, `active`, `LEI`, `lei_source`, `lei_year`, `n_lei` | The ID crosswalk other sources join through. Not read by the app |
-| `hidden_loss` | (CERT, quarter), the newest 20 quarters, every filer: `loss_htm`, `loss_afs`, `loss_loans_res`, `loss_loans_oth`, `hidden_loss`, `adj_equity_to_assets`, `pct_worst`, `loan_yield`, `loan_yield_imputed`, `rate_gap`, `mtg_rate`, `bucket_cov`, `na_reason`, `method_version` | The planned "hidden loss" panel (about 2 MB). Not read by the app yet |
+| `hidden_loss` | (CERT, quarter), the newest 20 quarters, every filer: `loss_htm`, `loss_afs`, `loss_loans_res`, `loss_loans_oth`, `hidden_loss`, `adj_equity_to_assets`, `pct_worst`, `loan_yield`, `loan_yield_imputed`, `rate_gap`, `mtg_rate`, `bucket_cov`, `na_reason`, `method_version` | The app's stress card (Overview): hidden loss, equity after it and its percentile, and a 20-quarter chart (about 2 MB) |
 | `hidden_loss_history` | (CERT, quarter) from 1997 Q2: the same, plus the inputs, the symmetric and calibrated variants, `cal_factor`, `uninsured_share` and the run-risk flags (about 870k rows, 46 MB) | Research and the backtest. Never shipped to the app |
-| `run_stress` | CERT in the newest quarter, every filer: `ASSET`, `RBCT1J`, `t1_ratio`, `unins_share`, `loan_disc`, then for each run (`unins`, `unins_fhlb`, `all`, `all_fhlb`) `bp_*`, `how_*`, `min_ratio_*`, `pct_worst_*`; `na_reason`, `method_version` | The planned "breaking point" panel. Not read by the app yet |
+| `run_stress` | CERT in the newest quarter, every filer: `ASSET`, `RBCT1J`, `t1_ratio`, `unins_share`, `loan_disc`, then for each run (`unins`, `unins_fhlb`, `all`, `all_fhlb`) `bp_*`, `how_*`, `min_ratio_*`, `pct_worst_*`; `na_reason`, `method_version` | The app's stress card (Overview): the breaking point of each run |
 | `hmda_book` | CERT with HMDA loans (2018 on) that filed in the newest quarter (about 2,400): `RISDATE` (the valuation date), `kept_k`, `valued_share`, `bal_k`, `pv_k`, `wac`, `mkt_rate`, `duration`, `loss_pv`, `loss_dur`, `book_k`, `hmda_share`, `hmda_year_max`, `na_reason`, `method_version` (about 110 KB) | Research (`research/hmda-mortgage-rates`). Not read by the app |
 
 **Which failures.** `fail_panel` keeps `RESTYPE == "FAILURE"` with a

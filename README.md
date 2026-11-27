@@ -77,8 +77,10 @@ Everything comes from `api.fdic.gov` (CORS-open, no auth). See
   each post-2000 failure, cut from the stored quarters, so no per-bank
   requests; a new failure appears the night after FDIC lists it). It also
   stores the extra Call Report fields the research estimators need and
-  publishes two research-only marts the app does not read
-  (`research_field_coverage`, `bank_ids`). They live in
+  builds `hidden_loss` and `run_stress` (the Overview's stress card, below).
+  Research-only marts (`research_field_coverage`, `bank_ids`,
+  `hidden_loss_history`, `hmda_book`, ...) are published but not shipped.
+  The shipped marts live in
   the `data-marts` GitHub Release; each deploy downloads them into
   `app/data/`, so both sites carry their own copy. To run the app locally,
   download them first:
@@ -90,6 +92,18 @@ Everything comes from `api.fdic.gov` (CORS-open, no auth). See
   95% as many banks have filed as in the quarter before it. Quarters open
   on the API as a trickle of early filers, and a half-filled cross-section
   would make every peer median quietly wrong rather than obviously absent.
+- **Stress card** — under the statements on the Overview: the bank's
+  hidden loss (what higher rates have taken off the value of its
+  held-to-maturity bonds and its loans, which reported equity does not
+  show), equity after it as a share of assets with its percentile among
+  all banks and a 20-quarter chart, and how big a deposit run (uninsured
+  depositors or all of them, with or without FHLB borrowing) would push
+  capital below 2% of assets. These are estimates from
+  `pipeline/R/hidden_loss.R` and `pipeline/R/run_stress.R` (floored base
+  method), labeled as such on the card: they leave out the value of the
+  deposit franchise and any credit losses. A number the inputs do not
+  support shows its reason ("Not reported: ..."), never 0, and if either
+  mart is missing the app hides that half of the card.
 - All dollar fields are $thousands, per FDIC convention.
 
 Not affiliated with the FDIC. Informational only, not financial advice.
