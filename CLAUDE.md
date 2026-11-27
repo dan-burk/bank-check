@@ -18,8 +18,8 @@ User docs are in `README.md`, and the pipeline design is in `pipeline/README.md`
 | `app/data/` | Shipped data: `fields_meta.csv`, `data-dictionary.md`. Mart `*.parquet` files (including `fail_panel`, `failures_meta`) are gitignored and downloaded |
 | `app/tests/smoke.R` | Deploy gate. Runs offline from the marts and `tests/fixtures/sd_banks.rds` (Dacotah, history from 1984, plus First B&T) |
 | `app/tests/integrity.R` | Recomputes chart values from the raw FDIC columns. Phase 2 hits the live API. `INTEGRITY_SKIP_LIVE=1` runs it offline |
-| `pipeline/build.R` | Nightly ETL entry point: pulls the last N quarters, writes the revisions log, builds the marts, runs the mart checks. The pieces: `R/` (throttled transport, raw store, source registry, pure estimators), `sources/` (`fdic.R`, `fred.R`, `failures.R`; `btfp.R` is one-time, by hand, writing the committed `static/btfp.*`; `hmda.R` is yearly, run only by `hmda.yml`), `marts/`, `checks/`, `tests/` (offline, `pipeline-test.yml`) |
-| `research/` | Analyses that read the releases and fetch nothing (`backtest/`, `run-stress/`, `unrealized-losses/`); `hmda-mortgage-rates/` still has its own fetch until spec PR 10 (PR 9 added the HMDA source it will read) |
+| `pipeline/build.R` | Nightly ETL entry point: pulls the last N quarters, writes the revisions log, builds the marts, runs the mart checks. The pieces: `R/` (throttled transport, raw store, source registry, pure estimators), `sources/` (`fdic.R`, `fred.R`, `failures.R`; `btfp.R` is one-time, by hand, writing the committed `static/btfp.*`; `hmda.R` is yearly, pulled only by `hmda.yml`; its nightly registry entry only checks the stored groups), `marts/`, `checks/`, `tests/` (offline, `pipeline-test.yml`) |
+| `research/` | Analyses that read the releases and fetch nothing (`backtest/`, `run-stress/`, `unrealized-losses/`, `hmda-mortgage-rates/`) |
 | `.github/workflows/pipeline.yml` | Nightly at 08:00 UTC, main only. Publishes the `data-raw` and `data-marts` releases and starts the deploy if the marts changed |
 | `.github/workflows/hmda.yml` | Yearly HMDA source: monthly cron that exits after one HEAD request unless a new national snapshot year is out; streams it into `hmda.*` files in `data-raw`. Needs `data.table` (pipeline-only) |
 | `.github/workflows/deploy.yml` | Smoke test, then deploys to both shinyapps.io and Pages. Runs on pushes to main that touch `app/**`, `pages/**`, `DESCRIPTION`. PRs run the test only |
@@ -34,7 +34,8 @@ quarter (paged past the 10k-row cap). It writes:
   Stored in the `data-raw` GitHub Release along with `manifest.csv` and
   `revisions.csv`. The yearly `hmda.yml` adds `hmda.lar.YYYY.parquet`
   (2018 on), `hmda.panel.parquet`, `hmda.groups.parquet` and
-  `hmda.manifest.csv` there; the nightly job reads only `hmda.panel`.
+  `hmda.manifest.csv` there; the nightly job reads only `hmda.panel` and
+  `hmda.groups`, never `hmda.lar.*`.
 - **marts**: `industry_quarterly` (one row per quarter, built from every
   raw file on hand), `latest_snapshot` (newest quarter plus the active
   directory), and `fail_panel` + `failures_meta` (the failures tab, cut
@@ -42,9 +43,12 @@ quarter (paged past the 10k-row cap). It writes:
   night). Plus marts the app does not read yet: `rates_monthly`,
   `research_field_coverage`, `bank_ids`, and `hidden_loss` (last 20
   quarters) with `hidden_loss_history` (1997 on), from the pure estimator
-  `pipeline/R/hidden_loss.R`, and `run_stress` (deposit-run breaking point
-  per bank, newest quarter, from `pipeline/R/run_stress.R`). Stored in the
-  `data-marts` release.
+  `pipeline/R/hidden_loss.R`, `run_stress` (deposit-run breaking point
+  per bank, newest quarter, from `pipeline/R/run_stress.R`), and
+  `hmda_book` (HMDA mortgage book rate and loss per bank at the newest
+  quarter, from `hb_value()` in `pipeline/R/hmda_book.R`). Stored in the
+  `data-marts` release. These research marts are in `NO_DEPLOY`
+  (`pipeline.yml`) and stay off the website until an app PR adds them.
 
 Each deploy downloads the marts into `app/data/` and ships them inside the
 site. The app does no multi-bank fetching. A single bank's history is
@@ -108,8 +112,8 @@ Rscript pipeline/build.R [N_QUARTERS]                     # default 10; output i
   for a few lines.
 - Any change to marts or checks must keep `pipeline/build.R` failing
   closed: when an FDIC or core-mart check fails, nothing is published. A
-  non-critical source (FRED, failures) or a mart built on one (`rates_monthly`,
-  `fail_panel`) that fails holds back only
+  non-critical source (FRED, failures, the stored HMDA groups) or a mart built
+  on one (`rates_monthly`, `fail_panel`, `hmda_book`) that fails holds back only
   itself, and `build.R` exits 2 so the job still goes red
   (`pipeline/R/sources.R`).
 - Run the smoke test before committing app changes.

@@ -1,0 +1,79 @@
+Valuation date 20260930, method hb-1. Today's rates: 30y 7.03%, 15y 6.42% (MORTGAGE30US/15US, last weekly reading). HMDA 2018-2025.
+
+== The four banks (hmda_book mart; hb_value() on the stored groups gives the same numbers)
+   loss_pv: 1 - value / balance left; loss_dur: duration x (mkt - wac); cprNN: loss_pv with cpr_below = NN%;
+   valued: share of kept dollars with a rate, term and fixed/ARM status; book: LNRS first liens (call report);
+   share = bal / book; est_loss = loss_pv x book; pct_equity = est_loss / EQTOT; cr_yield: all loans, ILNLSQ x 4 / average LNLSGR
+                   bank   wac   mkt dur loss_pv loss_dur cpr04 cpr06 cpr10 valued bal_M book_M share est_loss_M pct_equity cr_yield
+ Third Federal S&L (OH) 4.136 6.923 4.5    12.3     12.5  13.9  12.3   9.9  1.000  6277  10732  0.58       1324         71     4.93
+   Capitol Federal (KS) 4.011 6.934 4.9    13.8     14.2  15.4  13.8  11.3  1.000  3897   5632  0.69        778         82     4.54
+   Associated Bank (WI) 4.115 7.008 3.8    11.1     11.1  12.2  11.1   9.3  1.000  6369   6729  0.95        744         14     5.65
+      Dacotah Bank (SD) 6.041 6.771 2.0     2.4      1.5   2.8   2.4   1.6  0.995    44    186  0.24          4          1     6.38
+
+== Vintages (kept_sh, rate_kept and cov from the groups; bal_now, wac_now and loss at the valuation date)
+                   bank year orig_M kept_sh rate_kept cov bal_now_M wac_now loss
+ Third Federal S&L (OH) 2018   2161    0.95      3.80   1       275    4.26 13.8
+ Third Federal S&L (OH) 2019   2199    0.92      3.62   1       425    3.69 16.9
+ Third Federal S&L (OH) 2020   3490    0.82      2.99   1       705    3.02 18.6
+ Third Federal S&L (OH) 2021   3391    0.85      2.72   1      1079    2.81 19.8
+ Third Federal S&L (OH) 2022   3245    0.99      3.53   1      2039    3.59 12.4
+ Third Federal S&L (OH) 2023   1367    0.98      5.88   1       892    5.84  4.6
+ Third Federal S&L (OH) 2024    628    0.69      6.68   1       321    6.64  2.0
+ Third Federal S&L (OH) 2025    929    0.66      6.28   1       541    6.27  3.7
+   Capitol Federal (KS) 2018    900    0.99      4.11   1       210    4.24 13.6
+   Capitol Federal (KS) 2019    901    1.00      3.66   1       290    3.71 15.7
+   Capitol Federal (KS) 2020   1460    1.00      3.05   1       710    3.07 17.2
+   Capitol Federal (KS) 2021   1546    1.00      2.72   1       915    2.75 20.6
+   Capitol Federal (KS) 2022   1226    1.00      4.04   1       850    4.07 13.1
+   Capitol Federal (KS) 2023    524    1.00      5.73   1       395    5.70  5.6
+   Capitol Federal (KS) 2024    314    1.00      6.20   1       261    6.20  4.0
+   Capitol Federal (KS) 2025    298    0.99      6.15   1       266    6.15  3.7
+   Associated Bank (WI) 2018   2496    0.61      4.25   1       125    4.46  7.7
+   Associated Bank (WI) 2019   3305    0.73      3.74   1       473    3.76 11.5
+   Associated Bank (WI) 2020   4311    0.67      3.26   1      1303    3.25 13.3
+   Associated Bank (WI) 2021   4243    0.63      3.04   1      1540    3.04 17.2
+   Associated Bank (WI) 2022   2730    0.80      4.13   1      1538    4.13 10.3
+   Associated Bank (WI) 2023   1075    0.65      6.34   1       509    6.27  2.5
+   Associated Bank (WI) 2024   1009    0.47      6.57   1       369    6.52  2.0
+   Associated Bank (WI) 2025   1141    0.49      5.88   1       512    5.86  4.7
+      Dacotah Bank (SD) 2018     57    0.19      5.13   1         0    4.64 10.0
+      Dacotah Bank (SD) 2019     86    0.13      4.84   1         1    3.62 16.5
+      Dacotah Bank (SD) 2020    225    0.06      4.15   1         0    2.99 17.1
+      Dacotah Bank (SD) 2021    167    0.11      3.78   1         2    3.09 20.2
+      Dacotah Bank (SD) 2022    107    0.21      4.67   1        11    4.60  3.9
+      Dacotah Bank (SD) 2023     91    0.33      6.56   1         9    6.02  1.3
+      Dacotah Bank (SD) 2024    101    0.20      7.77   1         8    7.77 -1.7
+      Dacotah Bank (SD) 2025    120    0.18      7.21   1        11    7.21 -1.1
+
+== All FDIC banks, SD homes, one book: 88146 loans, $4139M kept of $21265M made 2018-2025
+ cpr_below   wac   mkt   dur loss_pv loss_dur valued
+         4 4.727 6.940 4.710  11.258   10.422  0.714
+         6 4.787 6.940 4.274   9.954    9.201  0.714
+        10 4.914 6.941 3.596   7.861    7.286  0.714
+   rate coverage of kept dollars by year: 2018 61%, 2019 63%, 2020 65%, 2021 89%, 2022 86%, 2023 80%, 2024 62%, 2025 64%
+
+== Every HMDA bank (2435 rows, 1072 valued): balance $1503B, WAC 4.29%, loss 11.9% (balance-weighted)
+   loss_pv across banks: p10 1.1%, p25 3.5%, median 7.3%, p75 11.2%, p90 13.7%
+   banks with no valued loans: 1363 (kept no loans x3; no kept balance left x86; no kept loans with a rate, term and fixed/ARM status x1272; no kept loans with a rate, term and fixed/ARM status; no 1-4 family first liens in the call report x2)
+   Largest est_loss / equity, banks with >= $100M left and HMDA share 0.5-1.1:
+  CERT                               NAME bal_M share  wac loss_pv pct_equity
+ 31945                       TRUSTCO BANK  3015  0.66 4.39    13.9      112.8
+ 29835               MILFORD FEDERAL BANK   213  0.59 3.79    14.1       84.6
+ 29488 FIRST FEDERAL SAVINGS AND LOAN ASS  1458  0.93 4.40    13.2       83.7
+ 27981       CAPITOL FEDERAL SAVINGS BANK  3897  0.69 4.01    13.8       81.6
+ 23287 THE CAPE COD FIVE CENTS SAVINGS BA  2765  0.94 4.27    15.0       80.1
+ 26517                  CAPE & COAST BANK   414  0.52 3.88    15.1       73.4
+ 90250 INSTITUTION FOR SAVINGS IN NEWBURY  2273  0.72 4.08    15.9       71.7
+ 29011                     MECHANICS BANK   447  0.73 4.56     8.2       71.4
+ 30012 THIRD FEDERAL SAVINGS AND LOAN ASS  6277  0.58 4.14    12.3       71.4
+ 23286 FALL RIVER FIVE CENTS SAVINGS BANK   335  0.57 4.04    15.0       67.6
+ 90140               ADAMS COMMUNITY BANK   446  0.69 4.57    10.8       66.2
+ 57228 EMBASSY BANK FOR THE LEHIGH VALLEY   458  0.59 4.32     9.9       65.5
+ 28599 OLYMPIA FEDERAL SAVINGS AND LOAN A   332  0.51 4.98    11.7       64.2
+ 32296                 UNION SAVINGS BANK  2416  0.92 4.44     9.6       62.8
+ 32526 AMERICAN SAVINGS BANK, NATIONAL AS  2023  0.70 4.29    14.6       61.3
+ 17180      MEREDITH VILLAGE SAVINGS BANK   656  0.78 4.66    11.4       61.0
+ 27998              GUARDIAN SAVINGS BANK   589  0.62 4.38     9.2       56.3
+  7151            THE LYONS NATIONAL BANK   367  0.59 4.13    14.9       56.2
+ 29047  FIRST FEDERAL BANK OF KANSAS CITY   420  0.88 4.61    12.6       56.2
+ 28706 FIRST FEDERAL SAVINGS AND LOAN ASS   406  0.61 4.52    12.9       55.7

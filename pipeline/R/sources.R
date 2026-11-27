@@ -14,7 +14,9 @@
 # downloaded from the release) and the run carries on. build.R then exits
 # with status 2, so the FDIC marts still publish but the job goes red.
 
-SOURCES <- list(fdic = SOURCE_FDIC, fred = SOURCE_FRED, failures = SOURCE_FAILURES)
+# hmda pulls nothing at night: it checks the groups hmda.yml stored
+SOURCES <- list(fdic = SOURCE_FDIC, fred = SOURCE_FRED, failures = SOURCE_FAILURES,
+                hmda = SOURCE_HMDA)
 
 # Run every source in order. Returns, per name, list(ok, value or error).
 run_sources <- function(sources, ctx) {

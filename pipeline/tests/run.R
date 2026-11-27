@@ -10,10 +10,10 @@ for (f in c("R/http.R", "R/store.R", "sources/fdic.R", "sources/fred.R",
             "R/hidden_loss.R", "R/run_stress.R", "R/hmda_book.R",
             "marts/rates.R", "marts/fail_panel.R",
             "marts/research_coverage.R", "marts/bank_ids.R", "marts/hidden_loss.R",
-            "marts/run_stress.R",
+            "marts/run_stress.R", "marts/hmda_book.R",
             "checks/check.R", "checks/rates.R", "checks/fail_panel.R",
             "checks/research_coverage.R", "checks/bank_ids.R", "checks/hidden_loss.R",
-            "checks/run_stress.R")) {
+            "checks/run_stress.R", "checks/hmda_book.R")) {
   source(file.path("pipeline", f))
 }
 

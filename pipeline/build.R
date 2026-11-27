@@ -37,6 +37,9 @@
 #                                     (R/hidden_loss.R), not read by the app yet
 #   marts/run_stress.parquet          deposit-run breaking point per bank, newest
 #                                     quarter (R/run_stress.R), not read by the app yet
+#   marts/hmda_book.parquet           HMDA mortgage book rate and loss per bank at the
+#                                     newest quarter (R/hmda_book.R, from the stored
+#                                     raw/hmda.groups.parquet), not read by the app
 #
 # The work is in pipeline/R/ (transport, raw store, source registry), pipeline/sources/
 # (pulls), pipeline/marts/ (builders) and pipeline/checks/.
@@ -60,13 +63,15 @@ for (d in c(RAW, MARTS)) dir.create(d, recursive = TRUE, showWarnings = FALSE)
 source(file.path("app", "R", "api.R"))
 source(file.path("app", "R", "statements.R"))
 for (f in c("R/http.R", "R/store.R", "sources/fdic.R", "sources/fred.R",
-            "sources/failures.R", "R/sources.R", "R/hidden_loss.R", "R/run_stress.R",
+            "sources/failures.R", "sources/hmda.R", "R/sources.R", "R/hidden_loss.R",
+            "R/run_stress.R", "R/hmda_book.R",
             "marts/industry.R", "marts/snapshot.R", "marts/rates.R",
             "marts/fail_panel.R", "marts/research_coverage.R", "marts/bank_ids.R",
-            "marts/hidden_loss.R", "marts/run_stress.R",
+            "marts/hidden_loss.R", "marts/run_stress.R", "marts/hmda_book.R",
             "checks/check.R", "checks/snapshot.R", "checks/industry.R",
             "checks/rates.R", "checks/fail_panel.R", "checks/research_coverage.R",
-            "checks/bank_ids.R", "checks/hidden_loss.R", "checks/run_stress.R")) {
+            "checks/bank_ids.R", "checks/hidden_loss.R", "checks/run_stress.R",
+            "checks/hmda_book.R")) {
   source(file.path("pipeline", f))
 }
 
@@ -164,6 +169,21 @@ marts_ok <- c(
     report_run_stress(rs$mart)
     check_run_stress(rs$mart, rs$inputs, newest)
     write_parquet(rs$mart, path)
+  }),
+  # The HMDA groups (stored yearly by hmda.yml) valued at the newest quarter
+  # with tonight's rates_monthly: skipped when HMDA or FRED is unusable
+  hmda_book = build_optional_mart("hmda_book", c("fdic", "fred", "hmda"), src, function(path) {
+    rates_path <- file.path(MARTS, "rates_monthly.parquet")
+    if (!file.exists(rates_path)) stop("rates_monthly was not built this run")
+    rates <- as.data.frame(read_parquet(rates_path))
+    groups <- read_hmda_groups()
+    cur <- as.data.frame(read_parquet(files[raw_rds(files) == newest],
+                                      col_select = c("CERT", "RISDATE", HL_LN_RES)))
+    hb <- build_hmda_book(groups, cur, rates)
+    pooled <- hmda_book_pooled(groups, rates, newest)
+    report_hmda_book(hb$mart, hb$dropped, pooled)
+    check_hmda_book(hb$mart, hb$dropped, pooled, groups, newest)
+    write_parquet(hb$mart, path)
   })
 )
 
