@@ -3,9 +3,11 @@
 #   Rscript pipeline/tests/run.R
 # CI: .github/workflows/pipeline-test.yml, on PRs touching pipeline/**.
 
+suppressPackageStartupMessages(library(data.table))   # pipeline-only: the HMDA code
 source(file.path("app", "R", "api.R"))
 for (f in c("R/http.R", "R/store.R", "sources/fdic.R", "sources/fred.R",
-            "sources/failures.R", "sources/btfp.R", "R/sources.R", "R/hidden_loss.R", "R/run_stress.R",
+            "sources/failures.R", "sources/btfp.R", "sources/hmda.R", "R/sources.R",
+            "R/hidden_loss.R", "R/run_stress.R", "R/hmda_book.R",
             "marts/rates.R", "marts/fail_panel.R",
             "marts/research_coverage.R", "marts/bank_ids.R", "marts/hidden_loss.R",
             "marts/run_stress.R",

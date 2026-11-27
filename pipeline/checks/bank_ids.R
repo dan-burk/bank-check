@@ -23,4 +23,10 @@ check_bank_ids <- function(ids, newest, n_filed) {
   cat(sprintf("bank_ids: %d CERTs, %d active; RSSD for %.2f%% of active filers, %d CERTs with none; %d CERTs with >1 RSSD; %d RSSDs on >1 CERT (any status)\n",
               nrow(ids), sum(ids$active), 100 * share, sum(is.na(ids$RSSD)),
               sum(ids$n_rssd > 1), length(unique(all_rssd[duplicated(all_rssd)]))))
+  # HMDA LEI links (reported: the HMDA job checks the links themselves)
+  check(all(is.na(ids$LEI) == is.na(ids$lei_source)), "LEI without a lei_source")
+  lei <- ids$LEI[!is.na(ids$LEI)]
+  cat(sprintf("bank_ids: LEI for %d CERTs (%d active); %d CERTs with >1 LEI over the years; %d LEIs on >1 CERT\n",
+              length(lei), sum(ids$active & !is.na(ids$LEI)), sum(ids$n_lei > 1),
+              length(unique(lei[duplicated(lei)]))))
 }

@@ -1,7 +1,8 @@
 # Spec: Fold the research prototypes into the data pipeline
 
-Status: PRs 1-7 implemented (see "PR order"); the rest is design. Inline
-"PR 3:" to "PR 7:" notes record where the code differs from this design.
+Status: PRs 1-7 and 9 implemented (see "PR order"); PR 8 (app) is
+skipped for now; the rest is design. Inline "PR 3:" to "PR 9:" notes
+record where the code differs from this design.
 
 ## Goal
 
@@ -166,6 +167,47 @@ formula strings, and parses numbers and Excel dates with a stop on any NA
 `RBC1AAJ`, `failures.parquet` and this CSV; `TODAY` is the failures
 manifest's `pulled_at` (the labels come from that list). Its committed
 result CSVs moved to a gitignored `out/`.
+
+PR 9: `sources/hmda.R`, run only by `hmda.yml` (monthly cron + manual),
+like BTFP not in the nightly registry, so it cannot block the FDIC marts.
+Years 2018-2025: 2018 is the first year with `interest_rate`,
+`loan_term` and `intro_rate_period`, and 2025 is the newest snapshot
+(2026 is 404). URLs, checked with HEAD on 2026-11-26:
+`files.ffiec.cfpb.gov/static-data/snapshot/<Y>/<Y>_public_{lar,ts,panel}_csv.zip`.
+The LAR and transmittal sheet (TS) exist for 2018-2025; the panel only
+for 2018-2023 (trap 12), so 2024-2025 LEIs carry the RSSD of their newest
+panel year, and a lender new since 2023 has none. Differences from the
+design:
+
+- The stream is `unzip -p` read 250,000 lines at a time, each chunk
+  parsed by `fread` and filtered. Locally (2 cores, 7 GB) a year takes
+  144-354 s once downloaded, and peak RSS was 1.36 GB for 2018 and 2.5 GB
+  for the run that included 2021 (26.1M rows).
+- The LEI -> RSSD -> CERT join is dated: the CERT whose call report
+  carried the RSSD in the HMDA year (raw `RSSDID`), not `bank_ids`' newest
+  RSSD. `hmda.panel` keeps every (year, LEI) with its link status, so
+  `bank_ids` takes one LEI per CERT (newest year) plus `n_lei`, with no
+  new rows. An RSSD with 2 LEIs is in the panel, not a stop.
+- LEIs are upper-cased: the 2018 TS and LAR disagree on case for 84
+  lenders.
+- Codes are stored as the text the CFPB sends, so "NA" and "Exempt" stay
+  apart. The groups never default a value: an unknown coupon, term or
+  fixed/ARM status is its own NA group (trap 1). Kept dollars with no
+  coupon (mostly small lenders' "Exempt") are 5-13% a year.
+- `hmda.groups` is 710k rows and 3.9 MB, not under 1 MB: rates are on a
+  fine grid and the key has seven columns. The coupon is rounded to 1/8
+  point as designed, which moves a lender that prices off the grid (Third
+  Federal: x.99%) by about 0.01 point.
+- The checks (`check_hmda_year()`): rows read within 0.1% of the TS
+  `lar_count` (2018's LAR is 562 rows short of its own TS; other years
+  match exactly), unzip's exit status, originated first liens within 10%
+  of the data browser's `actions_taken=1&lien_statuses=1` count (it allows
+  only two filters, so the closed-end filters are not in it; -0.7% to 0%),
+  and 90% of bank dollars linked to a CERT. A "bank" lender is one
+  supervised by OCC, FRS or FDIC (agency 1-3) or whose RSSD files call
+  reports (large banks report to the CFPB). Linked: 92.8-95.6%. Most of
+  the rest is banks' mortgage subsidiaries with their own RSSD
+  (PrimeLending, Waterstone), which file no call report.
 
 ### The FDIC raw file gets wider
 
@@ -456,7 +498,7 @@ Each PR is small, leaves main working, and can ship alone.
 | 6 | **`run_stress` mart**: `R/run_stress.R`, checks, SVB/Republic First golden tests. Trim `research/run-stress`. Close #22 | S | 5 | mart |
 | 7 | **BTFP static file**, then re-point `research/backtest` at the marts. Delete its fetch and probe. Close #21. Done | S | 3, 5 | research reproducible from releases |
 | 8 | **App: hidden loss and breaking point** on the bank view (deploy pattern, missing-mart handling, smoke test) | M | 5, 6 | first user-visible change |
-| 9 | **HMDA source** (`hmda.yml`, snapshot stream and filter, `hmda.panel`, `bank_ids` LEI links, `hmda.groups`) | L | 2, 4 | raw HMDA in the release |
+| 9 | **HMDA source** (`hmda.yml`, snapshot stream and filter, `hmda.panel`, `bank_ids` LEI links, `hmda.groups`). Done | L | 2, 4 | raw HMDA in the release |
 | 10 | **`hmda_book` mart** plus golden test. Trim `research/hmda-mortgage-rates`. Close #20 | M | 9 | mart |
 | 11 | **App: mortgage book rate** | S | 10 | UI |
 
@@ -479,6 +521,9 @@ open questions.
    (yearly, multi-GB stream, and `data.table` as a pipeline-only
    dependency), or a short list of banks through the data browser as in
    #20?
+   **Answered (Daniel, 2026-11): all HMDA-reporting banks from the
+   national snapshot, yearly. `data.table` is OK as a pipeline-only
+   dependency.** Implemented in PR 9 (see the PR 9 note under "Sources").
 5. **The four research PRs.** Close each one when its module PR lands and
    carry its README findings into main there (recommended), or merge them
    as they are first, as an archive?

@@ -138,7 +138,8 @@ marts_ok <- c(
       write_parquet(rcov, path)
     }),
   bank_ids = build_optional_mart("bank_ids", "fdic", src, function(path) {
-    ids <- build_bank_ids(read_id_history(files), snap$CERT[snap$active])
+    ids <- add_lei_links(build_bank_ids(read_id_history(files), snap$CERT[snap$active]),
+                         read_hmda_panel())
     check_bank_ids(ids, newest, n_filed = sum(!is.na(snap$RISDATE)))
     write_parquet(ids, path)
   }),

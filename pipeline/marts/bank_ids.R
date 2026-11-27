@@ -11,6 +11,17 @@
 #   rssd_risdate        the quarter RSSD was taken from
 #   n_rssd              distinct RSSDIDs over its filings (> 1 is reported)
 #   active              in the FDIC directory of active banks (latest_snapshot)
+#   LEI                 HMDA reporter LEI from the bank's newest HMDA year
+#                       with a link (NA when it never reported HMDA)
+#   lei_source          "hmda_panel" (NA without an LEI)
+#   lei_year            the HMDA year LEI was taken from
+#   n_lei               distinct LEIs linked to the CERT over all HMDA years
+#
+# The LEI columns come from the stored raw hmda.panel.parquet, which the
+# yearly HMDA job writes (sources/hmda.R: LEI -> panel RSSD -> the CERT
+# whose call report carried that RSSD in the HMDA year). Every LEI per
+# year is in that file; this keeps one per CERT. Without the file the
+# columns are NA.
 #
 # RSSD is the newest link. Within a quarter RSSDIDs are unique, but a CERT
 # can change RSSD over time (186 did in a 5-quarter sample), so a source
@@ -49,5 +60,35 @@ build_bank_ids <- function(hist, active_certs) {
   ids$n_rssd <- tabulate(match(u$CERT, ids$CERT), nrow(ids))
   ids$active <- ids$CERT %in% active_certs
   rownames(ids) <- NULL
+  ids
+}
+
+# The stored HMDA reporter panel, or NULL before the first HMDA run
+read_hmda_panel <- function(path = file.path(RAW, "hmda.panel.parquet")) {
+  if (!file.exists(path)) return(NULL)
+  as.data.frame(read_parquet(path, col_select = c("activity_year", "lei", "CERT", "link", "usd_k")))
+}
+
+# Pure: bank_ids + the HMDA panel -> bank_ids with the LEI columns. Per
+# CERT, the LEI of its newest linked HMDA year; two LEIs in that year
+# (rare: a bank that changed LEI mid-year) -> the one with more filtered
+# dollars. Every other column is unchanged.
+add_lei_links <- function(ids, panel) {
+  ids$LEI <- NA_character_
+  ids$lei_source <- NA_character_
+  ids$lei_year <- NA_integer_
+  ids$n_lei <- 0L
+  if (is.null(panel)) return(ids)
+  p <- panel[panel$link == "matched", ]
+  lost <- setdiff(p$CERT, ids$CERT)
+  if (length(lost)) stop("HMDA panel links CERTs not in bank_ids: ", paste(utils::head(lost, 5), collapse = ","))
+  p <- p[order(p$CERT, -p$activity_year, -p$usd_k), ]
+  top <- p[!duplicated(p$CERT), ]
+  m <- match(ids$CERT, top$CERT)
+  ids$LEI <- top$lei[m]
+  ids$lei_source[!is.na(m)] <- "hmda_panel"
+  ids$lei_year <- as.integer(top$activity_year[m])
+  u <- unique(p[c("CERT", "lei")])
+  ids$n_lei <- tabulate(match(u$CERT, ids$CERT), nrow(ids))
   ids
 }

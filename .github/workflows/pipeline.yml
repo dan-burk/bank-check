@@ -97,6 +97,11 @@ jobs:
                 gh release download data-raw --dir pipeline/out/raw --pattern "$s.*"
               fi
             done
+            # HMDA reporter panel (hmda.yml writes it) for the bank_ids
+            # LEI links. Never hmda.lar.*: only hmda.yml reads those.
+            if grep -qx hmda.panel.parquet <<< "$assets"; then
+              gh release download data-raw --dir pipeline/out/raw --pattern 'hmda.panel.parquet'
+            fi
           fi
           n=$(gh release view data-marts --json assets --jq '.assets | length')
           if [ "$n" -gt 0 ]; then
