@@ -2,6 +2,19 @@
 
 Exploratory research only. Nothing here touches the Shiny app or the pipeline.
 
+**Pipeline status (spec PR 9, 2026-11).** The pipeline now pulls the
+national HMDA snapshot for every bank, 2018-2025 (`pipeline/sources/hmda.R`,
+`hmda.yml`): `hmda.lar.YYYY.parquet`, `hmda.panel.parquet` and
+`hmda.groups.parquet` in the `data-raw` release, with the filter and
+grouping in `pipeline/R/hmda_book.R`. For the four banks below it gives the
+same loan counts, dollars and kept dollars as `results/vintages.csv` in
+every year, and the same exact kept rate (the groups round coupons to 1/8
+point, which moves Third Federal by about 0.01). The South Dakota
+benchmark has 0.1-14% more loans there, because the pipeline links each
+year to the banks insured that year, including ones that have merged
+since; this prototype used today's active banks. Spec PR 10 moves the
+valuation and trims this folder to read those files.
+
 ## The question
 
 During 2020–2021 banks made a lot of 30-year home loans at about 3%. In

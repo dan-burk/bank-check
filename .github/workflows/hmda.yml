@@ -1,0 +1,116 @@
+# Yearly HMDA source (pipeline/sources/hmda.R; spec
+# docs/specs/research-pipeline.md). Streams the CFPB/FFIEC national
+# snapshot LAR for each new year, keeps the closed-end first-lien loans of
+# FDIC-insured banks, and publishes to the data-raw release:
+#   hmda.lar.YYYY.parquet, hmda.panel.parquet, hmda.groups.parquet, hmda.manifest.csv
+# The snapshot zips (GBs) stay on the runner and are deleted as each year
+# is stored.
+#
+# Monthly cron: exits after one HEAD request unless the snapshot for the
+# year after the newest stored one is out (it comes in the summer).
+# By hand (Actions tab): leave "years" empty for every year not stored yet,
+# or give years to redo, e.g. 2018:2025. It never touches the FDIC files or
+# the marts, and the nightly pipeline never waits on it: separate
+# concurrency group, and the nightly job only reads hmda.panel.parquet
+# (for the bank_ids LEI links).
+name: HMDA yearly source
+
+on:
+  schedule:
+    - cron: "0 10 3 * *"   # 10:00 UTC on the 3rd of each month
+  workflow_dispatch:
+    inputs:
+      years:
+        description: "HMDA years to pull, e.g. 2018:2025 (empty = every snapshot year not stored yet)"
+        type: string
+        default: ""
+
+permissions:
+  contents: write   # upload release assets
+
+concurrency:
+  group: hmda
+  cancel-in-progress: false
+
+env:
+  PKG_REPO: "https://packagemanager.posit.co/cran/__linux__/noble/2026-09-17"   # same snapshot as deploy.yml
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  hmda:
+    # Publishes data, so a manual run from another branch must not
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-r
+        with:
+          r-version: "4.5.1"
+
+      # Own key: this job also installs data.table (pipeline-only dependency)
+      - name: Cache R packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.R_LIBS_USER }}
+          key: rlib-hmda-noble-r451-snap20260917-${{ hashFiles('DESCRIPTION') }}
+
+      - name: Install pinned packages
+        run: |
+          Rscript -e '
+            options(timeout = 300, warn = 1)
+            pkgs <- trimws(strsplit(read.dcf("DESCRIPTION")[, "Imports"], ",")[[1]])
+            install.packages(c(pkgs, "data.table"), repos = Sys.getenv("PKG_REPO"))
+          '
+
+      # The stored HMDA files: the manifest says which years are stored,
+      # the panel carries RSSDs into years without a panel file, and the
+      # groups are rebuilt from every stored LAR year.
+      - name: Download stored HMDA files
+        run: |
+          mkdir -p pipeline/out/raw
+          assets=$(gh release view data-raw --json assets --jq '.assets[].name')
+          if grep -q '^hmda\.' <<< "$assets"; then
+            gh release download data-raw --dir pipeline/out/raw --pattern 'hmda.*'
+          fi
+
+      - name: Which years are due
+        id: due
+        env:
+          YEARS: ${{ inputs.years }}
+        run: |
+          if [ -z "$YEARS" ]; then
+            YEARS=$(Rscript pipeline/sources/hmda.R due)
+          fi
+          echo "Years: $YEARS"
+          echo "years=$YEARS" >> "$GITHUB_OUTPUT"
+
+      # The dated LEI -> RSSD -> CERT join reads the call reports of every
+      # HMDA year (CERT, RSSDID), 2018 to the newest year pulled
+      - name: Download raw call reports for the HMDA years
+        if: steps.due.outputs.years != 'none'
+        env:
+          YEARS: ${{ steps.due.outputs.years }}
+        run: |
+          last=$(tr ',:' '\n\n' <<< "$YEARS" | sort -n | tail -1)
+          for y in $(seq 2018 "$last"); do
+            gh release download data-raw --dir pipeline/out/raw --pattern "risdate.${y}*.parquet"
+          done
+
+      - name: Pull, check and store
+        if: steps.due.outputs.years != 'none'
+        env:
+          YEARS: ${{ steps.due.outputs.years }}
+        run: |
+          touch pipeline/out/.run-start
+          Rscript pipeline/sources/hmda.R "$YEARS"
+          df -h . | tail -1
+
+      # Only reached when every year and the groups passed their checks
+      - name: Upload to data-raw
+        if: steps.due.outputs.years != 'none'
+        run: |
+          mapfile -t files < <(find pipeline/out/raw -name 'hmda.*' -newer pipeline/out/.run-start)
+          ls -la "${files[@]}"
+          gh release upload data-raw "${files[@]}" --clobber

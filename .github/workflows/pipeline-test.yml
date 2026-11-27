@@ -40,6 +40,9 @@ jobs:
             options(timeout = 300, warn = 1)
             pkgs <- trimws(strsplit(read.dcf("DESCRIPTION")[, "Imports"], ",")[[1]])
             install.packages(pkgs, repos = Sys.getenv("PKG_REPO"))
+            # data.table: pipeline-only (the HMDA code), not an app dependency
+            if (!requireNamespace("data.table", quietly = TRUE))
+              install.packages("data.table", repos = Sys.getenv("PKG_REPO"))
           '
 
       - name: Run pipeline tests
