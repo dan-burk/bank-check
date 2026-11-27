@@ -4,7 +4,7 @@ A nightly job pulls every bank's quarterly filings from the FDIC API, stores
 them as one parquet file per quarter (**raw**), and builds small finished
 tables (**marts**) that the app reads. It also pulls the FDIC failures list
 (for the failures tab) and a few FRED rate series (for `hidden_loss` and
-other research marts);
+other research marts), and values the HMDA loan groups a yearly job stores;
 see [Sources](#sources). Single-bank histories are the one thing the app
 still fetches live from the FDIC API.
 
@@ -39,9 +39,9 @@ flowchart LR
 | Extract: FDIC failures list, pull check, diff, store | `pipeline/sources/failures.R` |
 | One-time static source, run by hand: Fed BTFP borrowers (not in the nightly run) | `pipeline/sources/btfp.R` -> `pipeline/static/` |
 | Yearly source in its own workflow: HMDA national snapshot (not in the nightly run) | `pipeline/sources/hmda.R`, `.github/workflows/hmda.yml` |
-| Estimators: pure functions, data frames in and out (shared with research) | `pipeline/R/hidden_loss.R`, `pipeline/R/run_stress.R`, `pipeline/R/hmda_book.R` (HMDA filter, lender links, groups; the valuation comes in spec PR 10) |
-| Marts: `industry_quarterly` + `field_coverage`, `latest_snapshot`, `rates_monthly`, `fail_panel` + `failures_meta`, `research_field_coverage`, `bank_ids`, `hidden_loss` + `hidden_loss_history`, `run_stress` | `pipeline/marts/industry.R`, `pipeline/marts/snapshot.R`, `pipeline/marts/rates.R`, `pipeline/marts/fail_panel.R`, `pipeline/marts/research_coverage.R`, `pipeline/marts/bank_ids.R`, `pipeline/marts/hidden_loss.R`, `pipeline/marts/run_stress.R` |
-| Mart checks, one file per mart (plus the `check()` helper) | `pipeline/checks/industry.R`, `pipeline/checks/snapshot.R`, `pipeline/checks/rates.R`, `pipeline/checks/fail_panel.R`, `pipeline/checks/research_coverage.R`, `pipeline/checks/bank_ids.R`, `pipeline/checks/hidden_loss.R`, `pipeline/checks/run_stress.R`, `pipeline/checks/check.R` |
+| Estimators: pure functions, data frames in and out (shared with research) | `pipeline/R/hidden_loss.R`, `pipeline/R/run_stress.R`, `pipeline/R/hmda_book.R` (HMDA filter, lender links, groups, and the nightly valuation `hb_value()`) |
+| Marts: `industry_quarterly` + `field_coverage`, `latest_snapshot`, `rates_monthly`, `fail_panel` + `failures_meta`, `research_field_coverage`, `bank_ids`, `hidden_loss` + `hidden_loss_history`, `run_stress`, `hmda_book` | `pipeline/marts/industry.R`, `pipeline/marts/snapshot.R`, `pipeline/marts/rates.R`, `pipeline/marts/fail_panel.R`, `pipeline/marts/research_coverage.R`, `pipeline/marts/bank_ids.R`, `pipeline/marts/hidden_loss.R`, `pipeline/marts/run_stress.R`, `pipeline/marts/hmda_book.R` |
+| Mart checks, one file per mart (plus the `check()` helper) | `pipeline/checks/industry.R`, `pipeline/checks/snapshot.R`, `pipeline/checks/rates.R`, `pipeline/checks/fail_panel.R`, `pipeline/checks/research_coverage.R`, `pipeline/checks/bank_ids.R`, `pipeline/checks/hidden_loss.R`, `pipeline/checks/run_stress.R`, `pipeline/checks/hmda_book.R`, `pipeline/checks/check.R` |
 | Offline golden tests of the pure functions (fixtures cut from raw in `tests/fixtures/`) | `pipeline/tests/run.R` (CI: `.github/workflows/pipeline-test.yml`) |
 | Nightly run, upload, deploy trigger | `.github/workflows/pipeline.yml` |
 | Download marts before test and deploy | `.github/workflows/deploy.yml` |
@@ -94,7 +94,7 @@ flowchart LR
    published copy), upload the marts to `data-marts`, and start the deploy
    if one the app reads changed. The marts the app does not read
    (`NO_DEPLOY` in `pipeline.yml`: `rates_monthly`, `research_field_coverage`,
-   `bank_ids`, `hidden_loss`, `hidden_loss_history`, `run_stress`) never start a deploy.
+   `bank_ids`, `hidden_loss`, `hidden_loss_history`, `run_stress`, `hmda_book`) never start a deploy.
    Most nights nothing changed and nothing deploys.
 
 Steps 1 to 3 run for each source in the registry (`pipeline/R/sources.R`),
@@ -105,7 +105,8 @@ FDIC first. What a failure does depends on what failed:
 | FDIC request or check, or a core mart's check (`industry_quarterly`, `field_coverage`, `latest_snapshot`) | Run stops, nothing is published |
 | FRED request or pull check | FRED keeps its last good raw files (downloaded from the release). `rates_monthly`, `hidden_loss` and `run_stress` are rebuilt from them while they are under 10 days old, and skipped after that, so the published copies stay. FDIC publishes. `build.R` exits with status 2 and the job fails at the end, so GitHub emails |
 | Failures request or pull check | Same as FRED: the stored `failures.*` files stay, and `fail_panel` is rebuilt from them while they are under 35 days old (the old monthly refresh was never fresher), skipped after that |
-| `rates_monthly`, `fail_panel`, `research_field_coverage`, `bank_ids`, `hidden_loss` or `run_stress` check | That mart is not published (its old copy stays). `failures_meta` is held back with `fail_panel`, and `hidden_loss_history` with `hidden_loss`, so each pair always matches. `hidden_loss` reads tonight's `rates_monthly`, and `run_stress` tonight's `hidden_loss`, so each fails when the one before it did. The others publish. Job fails at the end |
+| Stored HMDA groups missing or without the group columns (the `hmda` source pulls nothing at night: it checks the `hmda.groups.parquet` downloaded from the release) | `hmda_book` is skipped (its published copy stays). FDIC publishes. Job fails at the end |
+| `rates_monthly`, `fail_panel`, `research_field_coverage`, `bank_ids`, `hidden_loss`, `run_stress` or `hmda_book` check | That mart is not published (its old copy stays). `failures_meta` is held back with `fail_panel`, and `hidden_loss_history` with `hidden_loss`, so each pair always matches. `hidden_loss` and `hmda_book` read tonight's `rates_monthly`, and `run_stress` tonight's `hidden_loss`, so each fails when the one it reads did. The others publish. Job fails at the end |
 
 `fail_panel` is built on a non-critical source, so it is not a core mart:
 its failure never blocks `industry_quarterly` or `latest_snapshot`, and
@@ -120,7 +121,7 @@ is what the deploy ships.
 | `industry_quarterly` | quarter, every `STATEMENT_FIELDS` field summed (NA where `field_coverage` is below `COVERAGE_MIN`): the statement lines plus the numerators and denominators of the "All banks" chart lines | Industry tab: table and charts; industry lines on the metric charts |
 | `field_coverage` | quarter × statement field: banks reporting it and their share of assets | Audit of gaps; the checks in `pipeline/checks/` |
 | `latest_snapshot` | bank in the newest quarter, plus active banks that have not filed yet | Peer bands (banks that filed) and the bank picker (`active` banks) |
-| `rates_monthly` | FRED series × month: `avg`, `last`, `n_obs`, `n_missing` (blank days), `complete` (FALSE for the month to date), `method_break` | Input to `hidden_loss` and the planned HMDA mart. Not read by the app yet |
+| `rates_monthly` | FRED series × month: `avg`, `last`, `n_obs`, `n_missing` (blank days), `complete` (FALSE for the month to date), `method_break` | Input to `hidden_loss` and `hmda_book`. Not read by the app yet |
 | `fail_panel` | (CERT, quarter) for the 0-20 quarters before each failure: the `APP_FIELDS` columns from raw, plus `label`, `fail_date`, `qtrs_before` | Failures tab: trajectories and the failed-bank median |
 | `failures_meta` | failed bank: `label`, `NAME`, `CITY`, `PSTALP`, `fail_date`, `QBFASSET`, `region`, `size_bucket`, `n_filings` | Failures tab: the picker and its region and size filters |
 | `research_field_coverage` | quarter × `RESEARCH_FIELDS` field: `in_raw`, `n_reported`, `asset_share` (weighted as `field_coverage`) | Audit of the research inputs. Not read by the app |
@@ -128,6 +129,7 @@ is what the deploy ships.
 | `hidden_loss` | (CERT, quarter), the newest 20 quarters, every filer: `loss_htm`, `loss_afs`, `loss_loans_res`, `loss_loans_oth`, `hidden_loss`, `adj_equity_to_assets`, `pct_worst`, `loan_yield`, `loan_yield_imputed`, `rate_gap`, `mtg_rate`, `bucket_cov`, `na_reason`, `method_version` | The planned "hidden loss" panel (about 2 MB). Not read by the app yet |
 | `hidden_loss_history` | (CERT, quarter) from 1997 Q2: the same, plus the inputs, the symmetric and calibrated variants, `cal_factor`, `uninsured_share` and the run-risk flags (about 870k rows, 46 MB) | Research and the backtest. Never shipped to the app |
 | `run_stress` | CERT in the newest quarter, every filer: `ASSET`, `RBCT1J`, `t1_ratio`, `unins_share`, `loan_disc`, then for each run (`unins`, `unins_fhlb`, `all`, `all_fhlb`) `bp_*`, `how_*`, `min_ratio_*`, `pct_worst_*`; `na_reason`, `method_version` | The planned "breaking point" panel. Not read by the app yet |
+| `hmda_book` | CERT with HMDA loans (2018 on) that filed in the newest quarter (about 2,400): `RISDATE` (the valuation date), `kept_k`, `valued_share`, `bal_k`, `pv_k`, `wac`, `mkt_rate`, `duration`, `loss_pv`, `loss_dur`, `book_k`, `hmda_share`, `hmda_year_max`, `na_reason`, `method_version` (about 110 KB) | Research (`research/hmda-mortgage-rates`). Not read by the app |
 
 **Which failures.** `fail_panel` keeps `RESTYPE == "FAILURE"` with a
 failure year from 2000 (581 banks in 2026). `ASSISTANCE` rows are banks that got
@@ -257,6 +259,44 @@ NA has no reason or a percentile, or, re-running 5 to 100% runs,
 securities gains sold. (The spec's `t1_after <= RBCT1J` is too strict: a
 security worth more than its cost realizes a gain.)
 
+**`hmda_book`.** Each bank's HMDA mortgage book valued at the newest
+quarter end (method and findings: `research/hmda-mortgage-rates/README.md`).
+`hb_value(groups, rates, val_date, params)` in `pipeline/R/hmda_book.R` is
+pure; its assumptions are one list, `HB_PARAMS` (prepayment 6% a year, 20%
+once the coupon is more than 0.5 point above the going rate, ±0.5 point
+for the duration). It runs the stored `hmda.groups` (written yearly by
+`hmda.yml`) forward month by month with the FRED history from tonight's
+`rates_monthly` and discounts what is left at the valuation month's last
+weekly MORTGAGE30US (terms over 15 years) or MORTGAGE15US reading. So the
+book rate changes once a year, when a new HMDA year arrives, and the loss
+follows rates every week. Each loan type is valued once per $1 and
+scaled, so a night's run takes about 30 s. Deps: fdic, fred and hmda. The
+`hmda` source pulls nothing at night: it checks that the
+`hmda.groups.parquet` downloaded from the release (never `hmda.lar.*`) is
+there, so without it only `hmda_book` is skipped. Rules:
+
+- Missing is NA, never 0. Only kept loans with a coupon, a term and a
+  known fixed/ARM status are valued; the rest are counted in
+  `valued_share` (1,272 banks, mostly small lenders reporting "Exempt",
+  have none and get an NA `wac` with an `na_reason`).
+- `book_k` is the call report's closed-end first-lien 1-4 family line
+  (the `LNRS*` maturity buckets, as `hidden_loss` uses), NA when a bucket
+  is unreported. `hmda_share` = `bal_k / book_k` can exceed 1 for a bank
+  that sold "kept" loans in a later year.
+- A CERT with HMDA groups that did not file this quarter (merged or
+  failed since) is dropped and counted in the log line.
+
+The check (`checks/hmda_book.R`) fails the mart when it is not for the
+newest quarter, a CERT is duplicated or lost, `wac`, `mkt_rate`,
+`duration`, `loss_pv`, `valued_share` or `hmda_share` is out of range, a
+balance exceeds the dollars valued, an NA has no reason, or the PV loss
+and the duration shortcut (`duration × (mkt_rate − wac)`) of all banks'
+loans pooled are more than 1 point apart (12.0% vs 12.2% at 2026 Q3).
+Per bank the two are reported, not failed: in a book that mixes
+below-market 2020-21 loans with above-market 2023-25 ones the shortcut
+overstates the gain on loans that prepay at 20%, so 17% of banks are more
+than 1 point apart.
+
 Planned: `peer_bands_quarterly` (historical peer bands).
 
 ## Sources
@@ -267,7 +307,7 @@ Planned: `peer_bands_quarterly` (historical peer bands).
 | FDIC failures | `sources/failures.R` | nightly, 1 request (about 4,100 rows; the list changes a few times a year) | diff by CERT + FAILDATE (by name too for the pre-1977 rows that have no CERT) | `failures.parquet` (every RESTYPE since 1934, as sent), `failures.manifest.csv`, `failures.revisions.csv` | row count = API total, every FAILDATE parses (`M/D/YYYY`), no CERT missing since 1984, no duplicate key, never fewer rows than stored, SVB, Signature and First Republic present with 2023 dates | no |
 | FRED `DGS10` (daily), `MORTGAGE30US`, `MORTGAGE15US` (weekly) | `sources/fred.R` | nightly, full history, 1 keyless `fredgraph.csv` request per series | diff by date against the stored file | `fred.<SERIES>.csv`, `fred.manifest.csv`, `fred.revisions.csv` | header as expected, every value parses (blank or `.` is NA), not empty, no duplicate dates, values in [0, 25]%, newest observation at most 7 days old (daily) or 10 (weekly), history shrinks by at most 5 rows | no |
 | Fed BTFP borrower disclosure | `sources/btfp.R` | manual, once (the program ended in 2024; the Fed's March 2025 file is final). Not in the registry, so it never runs at night and cannot block or delay a publish | none: the XLSX's sha256 is pinned, and a re-download that differs stops | committed to git, not the release: `pipeline/static/btfp.borrowers.csv` (one row per borrower RSSD: name, city, state, advances count and $ thousands, first and last advance, last repayment) and `btfp.source.txt` (URL, download date, XLSX and CSV sha256, counts) | every advance has an RSSD, amount and dates; 9,812 advances, 1,806 borrowers, $759.6B as recorded; at least 60% of borrowers join to `bank_ids` by RSSD (73.5%: the rest are credit unions and other lenders). The offline tests re-check the committed CSV against its source record | no |
-| HMDA national snapshot (CFPB/FFIEC), 2018 on | `sources/hmda.R`, run only by `hmda.yml` | yearly (the snapshot for year Y comes out in the summer of Y+1). Monthly cron, plus manual. Not in the registry, so it never runs at night and cannot block or delay a publish | `Rscript pipeline/sources/hmda.R due`: one HEAD request for the LAR of the year after the newest stored | `hmda.lar.YYYY.parquet` (the loans `hmda_filter()` keeps, by lenders linked to a CERT; codes as sent, plus `CERT`; 5-17 MB a year), `hmda.panel.parquet` (every year × reporter LEI: TS fields, panel RSSD and its year, `CERT`, `link`, filtered originations), `hmda.groups.parquet` (`hmda_groups()` over every year), `hmda.manifest.csv` (URL, size, sha256, the counts checked) | rows read within 0.1% of the transmittal sheets, unzip exits cleanly, originated first liens within 10% of the data browser's count, every LAR lender has a TS row, at least 90% of bank dollars linked to a CERT; groups: unique key, `kept_share` in [0, 1] | no |
+| HMDA national snapshot (CFPB/FFIEC), 2018 on | `sources/hmda.R`, pulled only by `hmda.yml` | yearly (the snapshot for year Y comes out in the summer of Y+1). Monthly cron, plus manual. The pull never runs at night and cannot block or delay a publish; the nightly registry entry (`SOURCE_HMDA`) only checks the stored `hmda.groups.parquet`, for `hmda_book` | `Rscript pipeline/sources/hmda.R due`: one HEAD request for the LAR of the year after the newest stored | `hmda.lar.YYYY.parquet` (the loans `hmda_filter()` keeps, by lenders linked to a CERT; codes as sent, plus `CERT`; 5-17 MB a year), `hmda.panel.parquet` (every year × reporter LEI: TS fields, panel RSSD and its year, `CERT`, `link`, filtered originations), `hmda.groups.parquet` (`hmda_groups()` over every year), `hmda.manifest.csv` (URL, size, sha256, the counts checked) | rows read within 0.1% of the transmittal sheets, unzip exits cleanly, originated first liens within 10% of the data browser's count, every LAR lender has a TS row, at least 90% of bank dollars linked to a CERT; groups: unique key, `kept_share` in [0, 1] | no |
 
 **HMDA.** The national LAR is 0.6-1.5 GB zipped and several GB unzipped
 (5.1 GB for 2025) a year, so `hmda.R` streams it (`unzip -p`, 250,000 lines per `fread`)
@@ -277,10 +317,12 @@ whose call report carried that RSSD in the HMDA year. The panel exists
 for 2018-2023 only, so later years carry each LEI's newest panel RSSD.
 Codes stay the text the CFPB sends ("NA" is not "Exempt"). In the groups
 an unknown coupon, term or fixed/ARM status is its own NA group, never a
-default. The yearly part (filter, links, groups) is
-`pipeline/R/hmda_book.R`; the nightly valuation of the groups is spec PR
-10. It needs `data.table`, a pipeline-only package that `hmda.yml` and
-`pipeline-test.yml` install (the app and the nightly job do not use it).
+default. The yearly part (filter, links, groups) is in
+`pipeline/R/hmda_book.R`, next to the nightly valuation of the groups
+(`hb_value()`, the `hmda_book` mart). The yearly part needs `data.table`, a
+pipeline-only package that `hmda.yml` and `pipeline-test.yml` install; the
+valuation is base R, because the nightly job (like the app) does not
+install it.
 The first backfill (2018-2025) streamed 138M LAR rows in 29 minutes
 locally (plus downloads), peak 2.5 GB RSS. Each year links 92.8-95.6% of
 bank-regulated dollars to a CERT; the rest is mostly banks' mortgage
@@ -403,7 +445,8 @@ A local run compares against whatever raw files are already in
 `pipeline/out/raw/`, not the published ones. To continue from the
 published history, download it first:
 `gh release download data-raw --dir pipeline/out/raw --pattern 'risdate.*.parquet'`
-(and `--pattern 'fred.*'` and `--pattern 'failures.*'` for the other sources).
+(and `--pattern 'fred.*'`, `--pattern 'failures.*'`, `--pattern 'hmda.panel.parquet'`
+and `--pattern 'hmda.groups.parquet'` for the other sources).
 
 To rebuild the BTFP file (only if the Fed replaces it):
 `Rscript pipeline/sources/btfp.R`. It needs `pipeline/out/marts/bank_ids.parquet`

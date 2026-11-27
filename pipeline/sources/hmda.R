@@ -1,9 +1,10 @@
 # HMDA: the CFPB/FFIEC yearly national snapshot of every mortgage
 # application (the LAR), cut down to the closed-end 1-4 family first-lien
 # loans that FDIC-insured banks originated. Yearly: the snapshot for year Y
-# comes out in the summer of Y+1. Not in the nightly registry
-# (R/sources.R): it runs in its own workflow (hmda.yml), so it can never
-# block or delay the FDIC marts. Spec: docs/specs/research-pipeline.md.
+# comes out in the summer of Y+1. The pull runs in its own workflow
+# (hmda.yml), so it can never block or delay the FDIC marts; the nightly
+# registry (R/sources.R) only checks the stored groups (SOURCE_HMDA below).
+# Spec: docs/specs/research-pipeline.md.
 #
 #   Rscript pipeline/sources/hmda.R due          # prints the snapshot years not
 #                                                # stored yet that exist, or "none"
@@ -46,6 +47,23 @@ HMDA_BANK_AGENCIES <- c("1", "2", "3")   # OCC, FRS, FDIC: banks and savings ass
 
 hmda_url <- function(y, kind) sprintf("%s/%d/%d_public_%s_csv.zip", HMDA_BASE, y, y, kind)
 hmda_path <- function(what) file.path(RAW, paste0("hmda.", what))
+
+# The nightly registry entry (R/sources.R), for the hmda_book mart's deps.
+# The nightly job pulls nothing from HMDA: pipeline.yml downloads the stored
+# hmda.groups.parquet (never hmda.lar.*), and run() only checks that the
+# copy is there with the group columns. A missing or broken file fails this
+# source alone, so hmda_book is skipped (there is no older copy to fall
+# back on: last_pull() is NA), the FDIC marts publish and build.R exits 2.
+SOURCE_HMDA <- list(
+  name = "hmda", critical = FALSE, cadence = "yearly", max_age_days = Inf,
+  run = function(ctx) {
+    p <- hmda_path("groups.parquet")
+    if (!file.exists(p)) stop("no stored hmda.groups.parquet (hmda.yml has not published one)")
+    miss <- setdiff(HB_GROUP_COLS, nanoparquet::read_parquet_schema(p)$name)
+    if (length(miss)) stop("hmda.groups.parquet lacks ", paste(miss, collapse = ","))
+    p
+  },
+  last_pull = function() NA)
 
 # HTTP status of a HEAD request (one request, throttled like every other)
 hmda_head <- function(url) {

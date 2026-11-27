@@ -1,8 +1,9 @@
 # Spec: Fold the research prototypes into the data pipeline
 
-Status: PRs 1-7 and 9 implemented (see "PR order"); PR 8 (app) is
-skipped for now; the rest is design. Inline "PR 3:" to "PR 9:" notes
-record where the code differs from this design.
+Status: PRs 1-7, 9 and 10 implemented (see "PR order"); PRs 8 and 11
+(app) are skipped for now: the research marts are published but not
+shown. Inline "PR 3:" to "PR 10:" notes record where the code differs
+from this design.
 
 ## Goal
 
@@ -293,6 +294,39 @@ security above cost realizes a gain. The research analysis
 quarters from raw + `hidden_loss_history`, and stops unless the newest
 quarter equals the mart.
 
+PR 10: `hmda_book` is `hb_value()` (`R/hmda_book.R`, base R, assumptions
+in `HB_PARAMS`, `method_version` "hb-1") on the stored `hmda.groups` at
+the newest quarter, with tonight's `rates_monthly`: the FRED monthly
+averages for the history and the valuation month's last weekly reading
+for today's rate, which is what #20 used. One row per CERT with groups
+that filed in the newest quarter (2,435 at 2026 Q3; 735 CERTs that merged
+or failed since are dropped and counted). Columns: `kept_k`,
+`valued_share`, `bal_k`, `pv_k`, `wac`, `mkt_rate`, `duration`, `loss_pv`,
+`loss_dur`, `book_k`, `hmda_share`, `hmda_year_max` (per bank: its newest
+HMDA year), `na_reason`, `method_version`; 110 KB. Differences from the
+design and from #20:
+
+- HMDA is a registry entry (`SOURCE_HMDA`, yearly, non-critical) whose
+  nightly `run()` only checks the downloaded `hmda.groups.parquet`; the
+  pull stays in `hmda.yml`. A missing file skips `hmda_book` alone.
+- The call-report book is the `LNRS*` first-lien buckets, not #20's
+  `LNRERES − LNRELOC` (which adds closed-end junior liens, and `LNRELOC`
+  is not in `RAW_FIELDS`). Adding it would have widened raw and changed
+  `research_field_coverage`; the first-lien line also matches HMDA's
+  first-lien filter. Third Federal's loss ÷ equity moves 79% → 71%.
+- Groups with no term or an unknown fixed/ARM status are not valued
+  (#20 read them as 30-year fixed): Dacotah 2.31% → 2.35%; the other three
+  banks match #20 to 0.001 point of WAC (golden test). A coupon that rounds
+  to 0% ($51M) is valued with the zero-rate payment, not NaN.
+- Each loan type (year, term, coupon, reset) is run once per $1 and
+  scaled, since the model is linear in dollars: 43,550 types instead of
+  424k groups, about 15 s per valuation.
+- The 1-point PV vs duration-shortcut check is on all banks pooled
+  (12.04% vs 12.19%); per bank it is reported. 17% of banks are further
+  apart, books mixing below- and above-market vintages where the
+  first-order shortcut misses the negative convexity of the 20%
+  refinancing.
+
 App-facing rules:
 
 - The deploy downloads marts **by name** (`deploy.yml` uses
@@ -314,13 +348,13 @@ App-facing rules:
 | `unrealized-losses/estimator.R` `estimate()` | `pipeline/R/hidden_loss.R` `hidden_loss(cur, prev, rates, params)` | Takes data frames instead of cache paths. Parameters (`DUR`, `MAX_DROP`, ...) are a list argument with the current values as defaults. NA fills are counted and flagged. Ranks keep NA. The symmetric and calibrated variants stay available through parameters, but the mart ships one (open question 2) |
 | `unrealized-losses/estimator.R` `fred_month_avg()` | `marts/rates.R` | Reads the `rates_monthly` mart instead of a CSV in a cache folder |
 | `run-stress/simulate.R` `run_sim()`, `breaking_point()`, `bp_rank()` | `pipeline/R/run_stress.R` | Already pure. `load_quarter()` becomes the mart builder. Assumptions become a parameter list |
-| `hmda-mortgage-rates/02_analyze.R` `mortgage_filter()`, `clean()`, `run_book()`, `value_book()` | `pipeline/R/hmda_book.R` | Split into a yearly part (filter and group) and a nightly part (value the groups). `VAL_DATE` becomes an argument (the latest quarter) |
-| `hmda-mortgage-rates/config.R` | removed | `BANKS` becomes "every bank in `bank_ids` with an LEI". The CPR assumptions move to the parameter list |
+| `hmda-mortgage-rates/02_analyze.R` `mortgage_filter()`, `clean()`, `run_book()`, `value_book()` | `pipeline/R/hmda_book.R` | Split into a yearly part (filter and group) and a nightly part (value the groups). `VAL_DATE` becomes an argument (the latest quarter). PR 10: done, `hb_value(groups, rates, val_date, params, by)`; `02_analyze.R` deleted |
+| `hmda-mortgage-rates/config.R` | removed | `BANKS` becomes "every bank in `bank_ids` with an LEI". The CPR assumptions move to the parameter list. PR 10: done; the mart is every CERT with HMDA groups (the same banks, linked by `hmda.yml`), the CPRs are `HB_PARAMS`. The four study banks stay as a list in `research/hmda-mortgage-rates/analyze.R` |
 | `backtest/02_backtest.R` `read_xlsx_min()` | `pipeline/sources/btfp.R` | Used once |
 | all four `01_fetch.R`, `probe_coverage.R`, `probe_fields.R` | **deleted** | Replaced by the source modules. The probe results are already written up in the READMEs |
 | `backtest/02_backtest.R` labeling, AUC, bootstrap, eras | **stays in research** | Reads `hidden_loss_history`, `failures` and `btfp.borrowers.csv`. `TODAY` becomes the `pulled_at` date in the raw manifest |
 | `run-stress/02_run.R` grid, curves, validation, worked example | **stays in research** | Reads the marts. The hard-coded `QUARTERS` list goes away |
-| HMDA sensitivity runs, the SD benchmark | **stays in research** | Calls `hmda_book.R` with other parameters |
+| HMDA sensitivity runs, the SD benchmark | **stays in research** | Calls `hmda_book.R` with other parameters. PR 10: `research/hmda-mortgage-rates/analyze.R` (the SD benchmark reads `hmda.lar.*`, the only research reader of those files) |
 | All `03_chart.R`, READMEs, `summary.txt`, PNGs | **stay in research** | The findings stay where they are |
 | Committed result CSVs (`results_latest.csv` 4,264 rows, `curves.csv`, `grid.csv`, `top25_latest.csv`, ...) | **deleted** | They are mart outputs now. Each README gets the `gh release download` line that reproduces them |
 
@@ -343,7 +377,7 @@ stops that mart (or, for FDIC, the whole run).
 | `rates_monthly` | Every month from the first FDIC quarter used to the latest quarter-end month is present for `MORTGAGE30US` and `DGS10` |
 | `hidden_loss` | Industry `loss_htm + loss_afs` equals the sum of the raw fair-value gaps (to the dollar), and its total is within 2% of the FDIC Quarterly Banking Profile figure we record per quarter (the research matched $486B in 2026Q3 and $616B in 2022Q4). `loan_yield_imputed` share ≤ 5%. `cal_factor` finite. Rows = filers with inputs, with the dropped count reported |
 | `run_stress` | Per bank: `sum(from_*) + shortfall == need`, `t1_after <= RBCT1J`, breaking point on the grid or NA |
-| `hmda_book` | PV loss and the duration shortcut within 1 point of each other (as in #20) |
+| `hmda_book` | PV loss and the duration shortcut within 1 point of each other (as in #20). PR 10: on all banks pooled; per bank it is reported (see the PR 10 note). Plus: newest quarter, CERTs unique and accounted for, `wac`/`mkt_rate`/`duration`/`loss_pv`/`valued_share`/`hmda_share` in range, balance ≤ dollars valued, every NA with an `na_reason` |
 | `bank_ids` | CERT unique. No RSSD mapped to two active CERTs |
 
 **Golden tests** (`pipeline/tests/`, offline, run in CI on PRs touching
@@ -357,7 +391,9 @@ watches `app/**`):
   uninsured run gives ratio 6.56%, breaking point 65%. Republic First
   2022Q4 breaks at 38%.
 - `value_book()` on a single 3% 30-year loan from 2021, valued at 7%,
-  against a closed-form price.
+  against a closed-form price. PR 10: `tests/test_hmda_book.R` (closed
+  forms with and without prepayment, ARM resets, the 15-year rate), plus
+  the four #20 banks from `fixtures/hmda_book_banks.rds`.
 
 These fixtures are small RDS files cut from the raw parquet, like
 `app/tests/fixtures/sd_banks.rds`.
@@ -419,7 +455,10 @@ These need fixing (or explicit flags) as the code moves:
    to 0. `load_quarter()` sets a missing `loan_disc` and missing
    `OTHBFHLB` to 0. `bucket_cov` treats missing as 0. HMDA sets a missing
    `term` to 360. Each of these turns "not reported" into "zero". In the
-   pipeline, count them, flag them, or drop the row and count it.
+   pipeline, count them, flag them, or drop the row and count it. PR 10:
+   HMDA groups with no coupon, term or fixed/ARM status are not valued
+   and are counted in `valued_share`; an unreported `LNRS*` bucket makes
+   `book_k` NA with an `na_reason`.
 2. **The calibration factor can blow up.** `cal_factor` = reported ÷
    modeled securities loss for the whole industry. In low-rate quarters
    (2020-21) the floored gap is about 0, so the modeled loss is about 0
@@ -467,7 +506,11 @@ These need fixing (or explicit flags) as the code moves:
     4 banks, but across all banks it has to become a reported list. Loans
     are discounted at the borrower survey rate, not a buyer's yield (loss
     understated). The data browser serves the current dataset: pin the
-    yearly **snapshot** files for reproducibility.
+    yearly **snapshot** files for reproducibility. PR 10: still true of
+    "kept" and the discount rate (documented in the research README, not
+    fixed); `hmda_share` above 1 (55 banks) flags banks that sold "kept"
+    loans later. A merged bank's pre-merger loans stay with its old CERT
+    and are dropped, not moved to the acquirer.
 13. **The coverage probe sampled.** `probe_coverage.R` used `limit = 2000`
     with no sort, so "first quarter with buckets = 1997Q2" was measured on
     a partial, arbitrary sample. The `research_field_coverage` mart will
@@ -499,8 +542,8 @@ Each PR is small, leaves main working, and can ship alone.
 | 7 | **BTFP static file**, then re-point `research/backtest` at the marts. Delete its fetch and probe. Close #21. Done | S | 3, 5 | research reproducible from releases |
 | 8 | **App: hidden loss and breaking point** on the bank view (deploy pattern, missing-mart handling, smoke test) | M | 5, 6 | first user-visible change |
 | 9 | **HMDA source** (`hmda.yml`, snapshot stream and filter, `hmda.panel`, `bank_ids` LEI links, `hmda.groups`). Done | L | 2, 4 | raw HMDA in the release |
-| 10 | **`hmda_book` mart** plus golden test. Trim `research/hmda-mortgage-rates`. Close #20 | M | 9 | mart |
-| 11 | **App: mortgage book rate** | S | 10 | UI |
+| 10 | **`hmda_book` mart** plus golden test. Trim `research/hmda-mortgage-rates`. Close #20 (already merged). Done | M | 9 | mart |
+| 11 | **App: mortgage book rate**. Skipped for now: scores stay off the website | S | 10 | UI |
 
 PRs 3 and 4 can run in parallel after 2. HMDA (9 to 11) is independent of
 6 to 8 and can come last, because it has the biggest download and the most

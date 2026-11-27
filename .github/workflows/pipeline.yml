@@ -6,13 +6,14 @@
 #   data-marts release: the marts the app reads (fail_panel and
 #              failures_meta included), plus rates_monthly,
 #              research_field_coverage, bank_ids, hidden_loss,
-#              hidden_loss_history and run_stress (not read by the app)
+#              hidden_loss_history, run_stress and hmda_book (not read
+#              by the app)
 # If an app mart changed, it starts "Test and deploy" so both sites pick
 # them up. Most nights nothing changed and nothing deploys.
 #
 # An FDIC failure (API down, a core mart check or test trips) stops the
 # job before anything is uploaded, so the last good data stays live and
-# GitHub emails the repo owner. A non-critical source (FRED, failures) failing holds
+# GitHub emails the repo owner. A non-critical source (FRED, failures, the stored HMDA groups) failing holds
 # back only its own files and marts: FDIC still publishes, and the job
 # still fails at the end so GitHub emails. Run it by hand from the Actions tab; set
 # "quarters" to 171 once for the 1984-to-now backfill
@@ -97,11 +98,15 @@ jobs:
                 gh release download data-raw --dir pipeline/out/raw --pattern "$s.*"
               fi
             done
-            # HMDA reporter panel (hmda.yml writes it) for the bank_ids
-            # LEI links. Never hmda.lar.*: only hmda.yml reads those.
-            if grep -qx hmda.panel.parquet <<< "$assets"; then
-              gh release download data-raw --dir pipeline/out/raw --pattern 'hmda.panel.parquet'
-            fi
+            # HMDA reporter panel and loan groups (hmda.yml writes them), for
+            # the bank_ids LEI links and the hmda_book mart. Never
+            # hmda.lar.*: only hmda.yml reads those. Without the groups the
+            # hmda source fails alone and hmda_book is skipped.
+            for f in hmda.panel.parquet hmda.groups.parquet; do
+              if grep -qx "$f" <<< "$assets"; then
+                gh release download data-raw --dir pipeline/out/raw --pattern "$f"
+              fi
+            done
           fi
           n=$(gh release view data-marts --json assets --jq '.assets | length')
           if [ "$n" -gt 0 ]; then
@@ -154,7 +159,7 @@ jobs:
       # does not read them yet, so they alone do not start a deploy.
       - name: Publish marts and deploy if they changed
         env:
-          NO_DEPLOY: "rates_monthly.parquet research_field_coverage.parquet bank_ids.parquet hidden_loss.parquet hidden_loss_history.parquet run_stress.parquet"
+          NO_DEPLOY: "rates_monthly.parquet research_field_coverage.parquet bank_ids.parquet hidden_loss.parquet hidden_loss_history.parquet run_stress.parquet hmda_book.parquet"
         run: |
           changed=0; deploy=0
           for f in pipeline/out/marts/*.parquet; do
