@@ -3,16 +3,15 @@
 # deposit run it could pay out. Both numbers come from the nightly
 # pipeline's research marts (pipeline/marts/hidden_loss.R and
 # run_stress.R; method in docs/specs/research-pipeline.md). They are
-# estimates, so the card says so in one plain line (STRESS_CAVEAT).
+# estimates, so the card says so (STRESS_CAVEAT). Copy is kept minimal on
+# purpose: no explanatory paragraphs.
 #
 # Each mart is optional (read_mart_optional): a missing file hides its half
 # of the card, and both missing hide the card. A number the mart could not
-# compute shows the mart's na_reason in words, never 0.
+# compute shows "Not reported" (the mart's na_reason in a tooltip), never 0.
 
-STRESS_CAVEAT <- paste0(
-  "Estimates, not reported figures. They leave out what the bank's ",
-  "depositor relationships are worth to it, and any losses from borrowers ",
-  "who stop paying.")
+STRESS_CAVEAT <- "Estimates."
+STRESS_NA <- "Not reported"
 
 # list(hl = hidden_loss mart, rs = run_stress mart), each NULL if missing
 load_stress <- function() {
@@ -60,15 +59,18 @@ ordinal <- function(n) {
 # "Q3 2026", flagged when the estimate is older than the app's latest
 # quarter, so a stale mart is never shown as current
 stress_asof <- function(rd, xs_rd) {
-  if (rd == xs_rd) quarter_name(rd) else
-    paste0(quarter_name(rd), ", older than the latest quarter (",
-           quarter_name(xs_rd), ")")
+  if (rd == xs_rd) quarter_name(rd) else paste0(quarter_name(rd), " (not latest)")
 }
 
-stress_box <- function(title, value, sub) {
+# "Not reported", with the reason as a hover tooltip
+na_span <- function(why) {
+  htmltools::span(class = "text-muted", title = if (!is.na(why)) why, STRESS_NA)
+}
+
+stress_box <- function(title, value, sub = NULL) {
   bslib::value_box(
     class = "kpi-compact", title = title, value = value,
-    htmltools::span(class = "kpi-delta", sub),
+    if (!is.null(sub)) htmltools::span(class = "kpi-delta", sub),
     theme = bslib::value_box_theme(bg = COL_PANEL, fg = COL_FG))
 }
 
@@ -79,37 +81,23 @@ stress_hidden_ui <- function(d, xs_rd) {
   if (is.null(d)) return(NULL)
   if (nrow(d) == 0) {
     return(htmltools::div(class = "text-muted",
-                          "No hidden-loss estimate for this bank in the last 20 quarters."))
+                          "No estimate."))
   }
   r <- d[nrow(d), ]
-  not_done <- paste0("Not reported: ", r$na_reason)
-  loss <- if (is.na(r$hidden_loss)) stress_box("Hidden loss*", "Not computed", not_done) else
-    stress_box("Hidden loss*", fmt_value(r$hidden_loss, "usd_k"),
-               if (is.na(r$loss_to_equity)) "share of equity: no positive equity reported"
-               else paste0(pct_txt(r$loss_to_equity, 0), " of its equity"))
-  adj <- if (is.na(r$adj_equity_to_assets)) {
-    stress_box("Equity after hidden losses", "Not computed", not_done)
-  } else {
-    stress_box("Equity after hidden losses", pct_txt(r$adj_equity_to_assets),
-               paste0("of assets (as reported: ",
-                      if (is.na(r$eq_to_assets)) "not reported" else pct_txt(r$eq_to_assets),
-                      ")"))
-  }
-  rank <- if (is.na(r$pct_worst)) {
-    stress_box("Compared with other banks", "Not ranked", "no estimate to compare")
-  } else {
-    p <- max(1, round(100 * r$pct_worst))
-    stress_box("Compared with other banks", paste0(ordinal(p), " percentile"),
-               paste0(p, "% of banks have this little equity left, or less"))
-  }
+  na_box <- function(title) stress_box(title, na_span(r$na_reason))
+  # The share of equity is NA when equity is not positive: no sub line then
+  loss <- if (is.na(r$hidden_loss)) na_box("Hidden loss") else
+    stress_box("Hidden loss", fmt_value(r$hidden_loss, "usd_k"),
+               if (!is.na(r$loss_to_equity)) paste0(pct_txt(r$loss_to_equity, 0), " of equity"))
+  adj <- if (is.na(r$adj_equity_to_assets)) na_box("Equity after losses") else
+    stress_box("Equity after losses", paste0(pct_txt(r$adj_equity_to_assets), " of assets"),
+               paste0("Reported: ",
+                      if (is.na(r$eq_to_assets)) STRESS_NA else pct_txt(r$eq_to_assets)))
+  rank <- if (is.na(r$pct_worst)) na_box("Percentile") else
+    stress_box("Percentile", ordinal(max(1, round(100 * r$pct_worst))), "vs. all banks")
   # One div, not a tagList: each child of a card is a flex item with a gap
   htmltools::div(
     htmltools::tags$h6(paste0("Hidden losses, ", stress_asof(r$RISDATE, xs_rd))),
-    htmltools::div(class = "small mb-2", paste0(
-      "Rates rose after the bank bought many of its bonds and made many of ",
-      "its loans, so they are worth less today. For loans and for bonds it ",
-      "plans to hold to maturity, its books do not subtract that loss from ",
-      "equity (the cushion that absorbs losses). This is the estimate.")),
     bslib::layout_columns(col_widths = bslib::breakpoints(xs = 12, md = 4),
                           gap = "0.6rem", loss, adj, rank)
   )
@@ -117,8 +105,7 @@ stress_hidden_ui <- function(d, xs_rd) {
 
 # ---- deposit run -----------------------------------------------------------
 
-RS_RUN_ROWS <- c(unins = "Uninsured depositors* pull their money",
-                 all   = "All depositors pull their money")
+RS_RUN_ROWS <- c(unins = "Uninsured leave*", all = "All leave")
 
 # Why one run was not computed: the mart's na_reason lists every missing
 # input, some tagged with the runs they block ("(FHLB-on runs)",
@@ -132,20 +119,16 @@ run_na_why <- function(na_reason, k) {
   if (length(w) == 0) "inputs not reported" else paste(w, collapse = "; ")
 }
 
-# One table cell: run k's outcome in words
+# One table cell: run k's outcome. Both failure modes ("below 2%" capital,
+# "can't pay") read the same; the reason for a missing run is a tooltip.
 run_cell <- function(r, k) {
   how <- r[[paste0("how_", k)]]
   bp  <- r[[paste0("bp_", k)]]
-  if (is.na(how)) {
-    return(htmltools::span(class = "text-muted",
-                           paste0("Not reported: ", run_na_why(r$na_reason, k))))
-  }
+  if (is.na(how)) return(na_span(run_na_why(r$na_reason, k)))
   switch(how,
-    "never"     = "Survives, even if all of it leaves",
-    "below 2%"  = htmltools::span(htmltools::strong(paste0("Fails after ", pct_txt(bp), " leaves")),
-                                  " (capital falls below 2% of assets)"),
-    "can't pay" = htmltools::span(htmltools::strong(paste0("Fails after ", pct_txt(bp), " leaves")),
-                                  " (runs out of things to sell)"),
+    "never"     = "Survives",
+    "below 2%"  = ,
+    "can't pay" = htmltools::strong(paste0("Fails at ", pct_txt(bp))),
     how)
 }
 
@@ -154,7 +137,7 @@ stress_run_ui <- function(r, xs_rd) {
   if (is.null(r)) return(NULL)
   if (nrow(r) == 0) {
     return(htmltools::div(class = "text-muted",
-                          "No deposit-run estimate for this bank in the latest quarter."))
+                          "No estimate."))
   }
   rows <- lapply(names(RS_RUN_ROWS), function(k) {
     htmltools::tags$tr(htmltools::tags$th(RS_RUN_ROWS[[k]]),
@@ -162,18 +145,14 @@ stress_run_ui <- function(r, xs_rd) {
                        htmltools::tags$td(run_cell(r, paste0(k, "_fhlb"))))
   })
   htmltools::div(
-    htmltools::tags$h6(paste0("How big a deposit run could it survive? ", stress_asof(r$RISDATE, xs_rd))),
-    htmltools::div(class = "small mb-2", paste0(
-      "In a run, depositors take their money out at once. The bank pays ",
-      "with cash, then sells bonds and loans; any loss on those sales comes ",
-      "out of its capital. It fails when capital drops below 2% of assets, ",
-      "the level at which regulators must step in, or when it has nothing ",
-      "left to sell.")),
+    # The quarter shows only when stale
+    htmltools::tags$h6(if (r$RISDATE == xs_rd) "Deposit run" else
+      paste0("Deposit run, ", stress_asof(r$RISDATE, xs_rd))),
     htmltools::tags$table(
       class = "table table-sm stress-run",
       htmltools::tags$thead(htmltools::tags$tr(
-        htmltools::tags$th(""), htmltools::tags$th("Without borrowing"),
-        htmltools::tags$th("If it can borrow from the FHLB*"))),
+        htmltools::tags$th(""), htmltools::tags$th("No borrowing"),
+        htmltools::tags$th("With FHLB*"))),
       htmltools::tags$tbody(rows))
   )
 }

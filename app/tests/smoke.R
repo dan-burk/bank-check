@@ -438,22 +438,24 @@ stopifnot(identical(d$RISDATE, c(20260630L, 20260930L)),          # oldest first
           is.null(hl_bank(NULL, "1", hist_fx)), is.null(stress_hidden_ui(NULL, 20260930)),
           is.null(rs_bank(NULL, "1")), is.null(stress_run_ui(NULL, 20260930)))
 h <- as.character(stress_hidden_ui(d, 20260930))
-stopifnot(grepl("$2.5M", h, fixed = TRUE), grepl("50% of its equity", h, fixed = TRUE),
-          grepl(">5%<", h, fixed = TRUE), grepl("as reported: 10%", h, fixed = TRUE),
-          grepl("10th percentile", h, fixed = TRUE), grepl("Q3 2026", h, fixed = TRUE),
-          !grepl("older than", h, fixed = TRUE),
-          grepl("Q3 2026, older than the latest quarter (Q4 2026)",
+stopifnot(grepl("$2.5M", h, fixed = TRUE), grepl("50% of equity", h, fixed = TRUE),
+          grepl(">5% of assets<", h, fixed = TRUE), grepl("Reported: 10%", h, fixed = TRUE),
+          grepl(">10th<", h, fixed = TRUE), grepl("vs. all banks", h, fixed = TRUE),
+          grepl("Hidden losses, Q3 2026<", h, fixed = TRUE),
+          !grepl("not latest", h, fixed = TRUE),
+          grepl("Q3 2026 (not latest)",
                 as.character(stress_hidden_ui(d, 20261231)), fixed = TRUE),
-          grepl("No hidden-loss estimate",
+          grepl("No estimate.",
                 as.character(stress_hidden_ui(d[0, ], 20260930)), fixed = TRUE))
 d_na <- d[2, ]
 d_na$hidden_loss <- NA; d_na$adj_equity_to_assets <- NA; d_na$pct_worst <- NA
 d_na$na_reason <- "no loan maturity buckets"
 h <- as.character(stress_hidden_ui(d_na, 20260930))
-stopifnot(!hl_has_series(d_na), grepl("Not reported: no loan maturity buckets", h, fixed = TRUE),
-          grepl("Not ranked", h, fixed = TRUE), !grepl("$0", h, fixed = TRUE))
+stopifnot(!hl_has_series(d_na), grepl('title="no loan maturity buckets"', h, fixed = TRUE),
+          lengths(regmatches(h, gregexpr(">Not reported<", h, fixed = TRUE))) == 3,
+          !grepl("$0", h, fixed = TRUE))
 pe <- plotly::plotly_build(hidden_equity_lines(d))$x$data
-stopifnot(identical(vapply(pe, `[[`, "", "name"), c("As reported", "After hidden losses")),
+stopifnot(identical(vapply(pe, `[[`, "", "name"), c("Reported", "After losses")),
           isTRUE(all.equal(as.numeric(unlist(pe[[1]]$y)), c(0, 10))),
           isTRUE(all.equal(as.numeric(unlist(pe[[2]]$y)), c(7, 5))))
 rs_fx <- data.frame(CERT = 1L, RISDATE = 20260930L,
@@ -463,13 +465,15 @@ rs_fx <- data.frame(CERT = 1L, RISDATE = 20260930L,
                     bp_all_fhlb = 0.33, how_all_fhlb = "can't pay",
                     na_reason = "no FHLB advances reported (FHLB-on runs)")
 h <- as.character(stress_run_ui(rs_bank(rs_fx, 1), 20260930))
-stopifnot(grepl("Survives, even if all of it leaves", h, fixed = TRUE),
-          grepl("Fails after 60.5% leaves", h, fixed = TRUE),
-          grepl("capital falls below 2% of assets", h, fixed = TRUE),
-          grepl("Fails after 33% leaves", h, fixed = TRUE),
-          grepl("runs out of things to sell", h, fixed = TRUE),
-          grepl("Not reported: no FHLB advances reported<", h, fixed = TRUE),
-          grepl("No deposit-run estimate",
+stopifnot(grepl(">Survives<", h, fixed = TRUE),
+          grepl("Fails at 60.5%<", h, fixed = TRUE),
+          grepl("Fails at 33%<", h, fixed = TRUE),
+          !grepl("(", sub(".*<tbody>", "", h), fixed = TRUE),     # no reasons in cells
+          grepl('title="no FHLB advances reported">Not reported<', h, fixed = TRUE),
+          grepl("Deposit run<", h, fixed = TRUE),
+          grepl("Deposit run, Q3 2026 (not latest)",
+                as.character(stress_run_ui(rs_fx, 20261231)), fixed = TRUE),
+          grepl("No estimate.",
                 as.character(stress_run_ui(rs_fx[0, ], 20260930)), fixed = TRUE),
           identical(run_na_why("no Tier 1 capital; no FHLB advances reported (FHLB-on runs)", "unins"),
                     "no Tier 1 capital"),
@@ -646,12 +650,12 @@ shiny::testServer(app = "app", {
   # Stress card with both marts: caveat, both halves, the chart
   session$setInputs(bank_pick = "17437")
   sc <- output$stress_card$html
-  stopifnot(grepl("Estimates, not reported figures", sc, fixed = TRUE),
+  stopifnot(grepl("Estimates.", sc, fixed = TRUE),
             grepl("Hidden losses, ", sc, fixed = TRUE),
-            grepl("How big a deposit run", sc, fixed = TRUE),
+            grepl("Deposit run", sc, fixed = TRUE),
             grepl("stress_plot", sc, fixed = TRUE))
   sp <- jsonlite::fromJSON(output$stress_plot, simplifyVector = FALSE)
-  stopifnot(identical(vapply(sp$x$data, `[[`, "", "name"), c("As reported", "After hidden losses")))
+  stopifnot(identical(vapply(sp$x$data, `[[`, "", "name"), c("Reported", "After losses")))
   cat("ok output: stress_card and stress_plot\n")
 })
 
@@ -671,8 +675,8 @@ for (gone in list(c("hidden_loss", "run_stress"), "hidden_loss", "run_stress")) 
     stopifnot(grepl("Stress Test", sc, fixed = TRUE) == (has_hl || has_rs),
               grepl("Hidden losses, ", sc, fixed = TRUE) == has_hl,
               grepl("stress_plot", sc, fixed = TRUE) == has_hl,
-              grepl("How big a deposit run", sc, fixed = TRUE) == has_rs,
-              grepl("FHLB: the Federal", sc, fixed = TRUE) == has_rs)
+              grepl("Deposit run", sc, fixed = TRUE) == has_rs,
+              grepl("FHLB: loans up to", sc, fixed = TRUE) == has_rs)
     if (!has_hl) {
       e <- tryCatch({ output$stress_plot; NULL }, error = function(e) e)
       stopifnot(inherits(e, "error"))   # req() halts: no chart

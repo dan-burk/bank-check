@@ -758,17 +758,17 @@ industry_history <- function(long, section, unit = "usd") {
 hidden_equity_lines <- function(d) {
   dates <- as.Date(as.character(d$RISDATE), "%Y%m%d")
   p <- plotly::plot_ly() |>
-    plotly::add_trace(x = dates, y = round(100 * d$eq_to_assets, 2), name = "As reported",
+    plotly::add_trace(x = dates, y = round(100 * d$eq_to_assets, 2), name = "Reported",
                       type = "scatter", mode = "lines",
                       line = list(color = COL_GRAY, width = 2, dash = "dash"),
                       hovertemplate = "%{y}%") |>
     plotly::add_trace(x = dates, y = round(100 * d$adj_equity_to_assets, 2),
-                      name = "After hidden losses", type = "scatter", mode = "lines+markers",
+                      name = "After losses", type = "scatter", mode = "lines+markers",
                       line = list(color = COL_MAIN, width = 2.5),
                       marker = list(size = 5, color = COL_MAIN),
                       hovertemplate = "%{y}%")
   # No x title: dates speak for themselves, and on a phone the title sat on
   # the two-row legend
-  base_layout(p, "Equity, % of total assets", x_title = "") |>
-    plotly::layout(yaxis = list(zeroline = TRUE, zerolinecolor = COL_CRIT))
+  base_layout(p, "Equity / assets", x_title = "") |>
+    plotly::layout(yaxis = list(zeroline = TRUE, zerolinecolor = COL_CRIT, ticksuffix = "%"))
 }

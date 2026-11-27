@@ -661,22 +661,15 @@ server <- function(input, output, session) {
     if (is.null(STRESS$hl) && is.null(STRESS$rs)) return(NULL)
     hl <- stress_hl()
     card(
-      chip_header("Stress Test: Hidden Losses And Deposit Runs", "Sensitivity"),
-      div(class = "text-muted small", tags$strong(STRESS_CAVEAT)),
+      chip_header("Stress Test", "Sensitivity"),
+      div(class = "text-muted small", STRESS_CAVEAT),
       stress_hidden_ui(hl, XS_RD),
       if (hl_has_series(hl)) plotlyOutput("stress_plot", height = "260px"),
       stress_run_ui(rs_bank(STRESS$rs, input$bank_pick), XS_RD),
-      card_footer(
+      # The footer only explains the run table's stars
+      if (!is.null(STRESS$rs)) card_footer(
         class = "text-muted small",
-        if (!is.null(STRESS$hl)) star_line(paste0(
-          "Hidden loss: the drop in value of bonds held to maturity and of loans ",
-          "because rates rose, estimated from how long until they mature or ",
-          "reset their rate. Losses on bonds held for sale already count in ",
-          "reported equity")),
-        if (!is.null(STRESS$rs)) tagList(
-          star_line("Uninsured: deposits above the $250,000 FDIC limit, the money that tends to leave first"),
-          star_line(paste0("FHLB: the Federal Home Loan Banks, which lend to banks against ",
-                           "collateral; here borrowing up to 25% of assets")))))
+        star_line("Uninsured: over $250K. FHLB: loans up to 25% of assets")))
   })
   output$stress_plot <- renderPlotly({
     hl <- stress_hl()

@@ -385,9 +385,9 @@ if (is.null(st$hl)) {
                 if (raw$EQTOT > 0) r$hidden_loss / raw$EQTOT else NA_real_)
     tr <- built_traces(hidden_equity_lines(d))
     keys <- as.Date(as.character(d$RISDATE), "%Y%m%d")
-    expect_trace(tag("stress chart As reported"), tr, "As reported", keys,
+    expect_trace(tag("stress chart Reported"), tr, "Reported", keys,
                  ifelse(d$RISDATE == XS_RISDATE, round(100 * raw$EQTOT / raw$ASSET, 2), NA))
-    expect_trace(tag("stress chart After hidden losses"), tr, "After hidden losses", keys,
+    expect_trace(tag("stress chart After losses"), tr, "After losses", keys,
                  round(100 * d$adj_equity_to_assets, 2))
   }
 }
